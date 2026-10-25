@@ -1,0 +1,36 @@
+[build-system]
+requires = ["setuptools>=61"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "xon"
+version = "0.1.0"
+description = "XON (X-87, X-Over-Node): a self-building coding + design workstation"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+dependencies = [
+  "torch>=2.1",
+  "numpy>=1.24",
+  "pyyaml>=6.0",
+  "pillow>=10.0",
+  "requests>=2.31",
+  "playwright>=1.40",
+  "pytest>=7.4",
+]
+
+[project.optional-dependencies]
+s3 = ["boto3>=1.28"]
+
+[project.scripts]
+xon = "xon.agent.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["xon*"]
+
+[tool.setuptools.package-data]
+"*" = ["*.yaml", "*.html", "*.js", "*.css", "*.json"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+markers = ["browser: needs headless chromium", "slow: takes > 30 s"]
