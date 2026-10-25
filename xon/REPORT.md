@@ -35,6 +35,10 @@ model was trained.
   and the supervisor 0.61 s after the STOP file appeared; the supervisor terminated the crawler; no XON process left.
 - OOM, NaN, preemption/resume, disk/bandwidth/request/GPU-hour caps, 429/403 back-off and cold-shard pruning have
   passing tests (`tests/test_lm.py`, `tests/test_governor.py`, `tests/test_crawler.py`, `tests/test_pipeline.py`).
+- **Clean-folder install:** `unzip xon.zip && ./scripts/setup.sh` (fresh venv, pinned deps, torch CPU) ->
+  `xon doctor` 12/12 -> `xon init && xon start --all`: 19.6 min wall clock, live crawl 33 pages, one cycle, both
+  models promoted (ppl 16.88, UI F1 0.296, recognition 0.962, fidelity 0.925, blind bug-fix 0.733). UI F1 is lower
+  than the main run because that cycle had no mock-gallery images and a single vision run; run-to-run variance is real.
 - Test suite: 57 passed, 0 skipped (including the slow two-process M3 test).
 
 ## Measured results

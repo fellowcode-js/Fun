@@ -52,7 +52,12 @@ Re-read this first when resuming. Newest entries at the bottom of each section.
 - Gates: M0 PASS (fresh home, 16.7 min), M1 PASS, M2 PASS (stability smoke only, no GPU), M3 PASS, M4 PASS.
 - M4 found a test gap: the agent's first patch (`<= 40`) passed tests; added a boundary test, now it restores `< 40`.
 
-## In progress / next
-- Cycle 3 via `xon start --all`, then `xon stop`; screenshots batch 2; report; zip + clean-dir install test.
+- Cycle 3 (via `xon start --all`): LM and vision both promoted (ppl 15.9, UI F1 0.555, zero-shot 0.956).
+- Kill switch under load: trainer halted 0.19 s, supervisor 0.61 s after STOP.
+- Clean-folder unzip -> setup.sh -> init -> start --all: 19.6 min, works.
+- Full suite 57/57 (incl. slow). Vault lint of docs: 0 orphans.
+
+## Next (if continued)
+- Tier B on a real GPU (docs/cloud.md); OCR for from_screenshot text; better icon detection.
 
 Related: [REPORT.md](REPORT.md) (measured results this log leads to), [XON.md](XON.md) (rules decided along the way).
