@@ -25,8 +25,87 @@ model was trained.
   robots.txt requests to docs.python.org at the 2-second per-domain spacing before I stopped it. Fixed, with a
   regression test (`test_robots_fetched_once_without_delay_override`).
 
+## Promotion gate, recovery and kill switch (observed, not just unit-tested)
+- **Cycle 2 was rolled back** by the gate: held-out perplexity regressed 72% (a fixed step budget on 34 new records
+  overfit). Its vision net had improved but was discarded with it. Fix: LM and vision are now gated independently;
+  LM increments are capped at 3 epochs over the cycle's data with full replay and 0.3x LR.
+- **Cycle 3** (run through `xon start --all`): both promoted. LM perplexity 18.80 -> 15.91, UI-detection F1
+  0.401 -> 0.555, zero-shot 0.828 -> 0.956.
+- **Kill switch under load:** with crawler sleeping and trainer mid-training, `xon stop` halted the trainer 0.19 s
+  and the supervisor 0.61 s after the STOP file appeared; the supervisor terminated the crawler; no XON process left.
+- OOM, NaN, preemption/resume, disk/bandwidth/request/GPU-hour caps, 429/403 back-off and cold-shard pruning have
+  passing tests (`tests/test_lm.py`, `tests/test_governor.py`, `tests/test_crawler.py`, `tests/test_pipeline.py`).
+- Test suite: 57 passed, 0 skipped (including the slow two-process M3 test).
+
 ## Measured results
 <!-- AUTO:START -->
+_Generated 2026-10-25 06:36 UTC by `xon report` from logs, eval files and gate results._
+
+### Hardware (probed)
+
+| CPU | RAM | GPU | disk free | network | headless browser | tier |
+|---|---|---|---|---|---|---|
+| 4 | 15.7 GB | none | 28.5 GB | HTTP 200 | yes | A |
+
+Budget plan: 0.5 h -> 0.79M params, 15.7M tokens (20.0 tok/param), measured 14995.4 tok/s.
+
+### Honest expectations table (measured)
+
+| tier | LM params | LM tokens seen | code pass@1 | code pass@5 | held-out ppl | bug-fix (blind) | design fidelity | UI detection F1@0.5 | recognition top-1 | zero-shot | wall-clock / cycle |
+|---|---|---|---|---|---|---|---|---|---|---|---|
+| A | 0.79M | 11.5M | 0.000 | 0.000 | 18.80 | 0.733 | 0.926 | 0.401 | 0.978 | 0.828 | 16.4 min |
+| A | 0.79M | 12.2M | 0.000 | 0.000 | 32.40 | 0.733 | 0.926 | 0.534 | 0.998 | 0.950 | 16.2 min |
+| A | 0.79M | 11.1M | 0.000 | 0.000 | 15.90 | 0.733 | 0.926 | 0.555 | 0.996 | 0.956 | 15.4 min |
+
+Tiers B and C were **not trained** (no GPU available). Their configs exist and are sized by the same code.
+
+### Latest cycle detail
+
+| metric | value | baseline / chance | note |
+|---|---|---|---|
+| code pass@1 / pass@5 (62 problems, 5 samples) | 0.000 / 0.000 | 0 | XON-written hidden tests |
+| held-out perplexity (stdlib + HTML) | 15.90 | BPE vocab 4096 | bits/char 1.304 |
+| bug-fix, dev set (20) | 1.000 | LM-only 0.000 | repair tool tuned on this set |
+| bug-fix, **blind** set (15) | 0.733 | LM-only 0.000 | never used for tuning |
+| screenshot->code fidelity (12 held-out) | 0.926 | bg-only 0.788, first layout 0.924 | SSIM+color+edge, 0..1 |
+| UI detection P / R / F1 @IoU0.5 | 0.543 / 0.568 / 0.555 | – | per class: {'button': 0.537, 'input': 0.719, 'nav': 0.944, 'card': 0.528, 'modal': 0.824, 'table': 0.538, 'icon': 0.122} |
+| recognition top-1 / top-5 / zero-shot | 0.996 / 1.000 / 0.956 | 0.100 | 10 procedural classes, 500 held-out |
+| contrast checker accuracy | 1.000 | – | 10 WCAG reference pairs |
+| critique: seeded-defect recall | 1.000 | – | generated page score 98 |
+
+Example LM completion (first eval problem, greedy):
+
+```python
+def add_two(a, b):
+    """Return a + b."""
+    return a
+
+```
+
+### Cycle history
+
+| cycle | promoted | reason | new records | web images | pseudo-labeled | LM steps | LM min | vision steps | events |
+|---|---|---|---|---|---|---|---|---|---|
+| 1 | yes | no promoted checkpoint yet | 927 | 18 | 0 | 2799 | 9.54 | 887 | time_budget |
+| 2 | no | regression beyond 2%: {'code_ppl': -0.723} | 34 | 18 | 0 | 2967 | 9.53 | 873 | init_from, time_budget |
+| 3 | yes | lm: PROMOTED (improved {'code_ppl': 0.1541}); vision: PROMOTED (improved {'ui_f1': 0.3854, | 225 | 0 | 0 | 2702 | 8.76 | 950 | init_from |
+
+### Data
+
+- Crawl rounds: 2 live, 3 mock. Live pages fetched: 63; mock pages fetched: 120.
+- Stored records by kind: {'text': 49, 'code': 999, 'instruct': 119, 'image': 54}
+- Rejects / quarantine / PII scrubs: {'reject:code_too_short': 37, 'reject:minified': 1, 'pii_EMAIL': 7, 'pii_SECRET': 4, 'quarantine:unsafe_adult': 3, 'reject:near_dup': 8, 'pii_PHONE': 3, 'pii_ADDRESS': 3, 'reject:image_dup': 6}
+- Records by license: {'PSF-2.0': 476, 'BSD-3-Clause': 1, 'Apache-2.0': 1, 'CC-BY-SA': 70, 'W3C-doc': 30, 'ISC': 19, 'MIT': 409, 'CC-BY-4.0': 119, 'CC-BY': 96}
+
+### Gates
+
+| gate | pass | key numbers |
+|---|---|---|
+| M0 | PASS | {'pass': True, 'minutes': 16.65, 'promoted': True, 'dashboard_ok': True, 'quick': False} |
+| M1 | PASS | {'lm_loss_first': 7.636, 'lm_loss_last': 2.118, 'loss_drop': 0.723, 'recog_top1': 0.978, 'chance': 0.1, 'margin_over_chance': 0.878, 'ui_f1': 0.4006, 'synthetic_pairs': 300, 'synthetic_images_present': True, 'synthetic_with_labels': 1.0, 'synthetic_html_ok': True, 'pass': True} |
+| M2 | PASS | {'pass': True, 'device': 'cpu', 'params': 101569920, 'steps': 12, 'minutes': 0.95, 'val_loss': 6.758033752441406, 'first_loss': 8.485, 'note': 'hours-long Tier B run NOT executed (no GPU in this environment); this is the stability smoke check'} |
+| M3 | PASS | {'pass': True} |
+| M4 | PASS | {'pass': True, 'minutes': 0.53} |
 <!-- AUTO:END -->
 
 ## What the numbers mean

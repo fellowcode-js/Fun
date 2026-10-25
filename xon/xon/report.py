@@ -68,7 +68,7 @@ def build(cfg: dict) -> str:
         L.append("### Latest cycle detail\n")
         L.append("| metric | value | baseline / chance | note |\n|---|---|---|---|")
         L.append(f"| code pass@1 / pass@5 ({det.get('pass_k', {}).get('problems')} problems, 5 samples) | {_fmt(m['code_pass@1'])} / {_fmt(m['code_pass@5'])} | 0 | XON-written hidden tests |")
-        L.append(f"| held-out perplexity (stdlib + HTML) | {_fmt(m['code_ppl'], 2)} | vocab {h['lm'].get('vocab', '')} | bits/char {_fmt(m.get('code_bpc'))} |")
+        L.append(f"| held-out perplexity (stdlib + HTML) | {_fmt(m['code_ppl'], 2)} | BPE vocab 4096 | bits/char {_fmt(m.get('code_bpc'))} |")
         bf, bfb = det.get("bugfix", {}), det.get("bugfix_blind", {})
         L.append(f"| bug-fix, dev set ({bf.get('cases')}) | {_fmt(m['bugfix_rate'])} | LM-only {_fmt(m['bugfix_lm_only'])} | repair tool tuned on this set |")
         L.append(f"| bug-fix, **blind** set ({bfb.get('cases')}) | {_fmt(m['bugfix_blind_rate'])} | LM-only {_fmt(m['bugfix_blind_lm_only'])} | never used for tuning |")
