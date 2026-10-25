@@ -1,0 +1,8 @@
+# pinned for reproducibility (torch is installed separately by setup.sh: CPU or CUDA wheel)
+torch>=2.1
+numpy==2.1.3
+pyyaml==6.0.2
+pillow==11.0.0
+requests==2.32.3
+playwright==1.48.0
+pytest==8.3.3

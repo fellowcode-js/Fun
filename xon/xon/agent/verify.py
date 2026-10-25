@@ -43,7 +43,7 @@ def improve(root: Path, path: str, report: dict) -> dict:
     if new != html:
         applied.append("contrast/labels/lang")
     if any(i["category"] == "accessibility" and "target" in i.get("detail", "") for i in report.get("issues", [])):
-        new = new.replace("</style>", "button{min-width:28px;min-height:28px}\n</style>", 1)
+        new = new.replace("</style>", "button{min-width:28px;min-height:28px}\ninput[type=checkbox]{width:24px;height:24px}\n</style>", 1)
         applied.append("touch targets >= 28px")
     p.write_text(new)
     return {"ok": True, "applied": applied}

@@ -77,11 +77,13 @@ class RulesBackend:
                 "screenshots": [shot1.get("path"), shot2.get("path")]}
 
     def _fix_tests(self, task, ws):
-        t0 = yield "test", {"cmd": "", "target": ""}
+        m = re.search(r"((?:tests?/)?[\w/]*test_[\w]+\.py|tests?/)", task)
+        target = m.group(1) if m else ""
+        t0 = yield "test", {"cmd": "", "target": target}
         if t0.get("ok"):
             return {"note": "tests already pass"}
-        fx = yield "fix", {"tests": "tests" if True else ""}
-        t1 = yield "test", {"cmd": "", "target": ""}
+        fx = yield "fix", {"tests": target or "tests"}
+        t1 = yield "test", {"cmd": "", "target": target}
         if fx.get("ok") and t1.get("ok"):
             yield "git", {"action": "checkpoint", "arg": f"fix: {fx.get('file')}"}
         return {"fixed": bool(fx.get("ok") and t1.get("ok")), "file": fx.get("file"), "diff": fx.get("diff"),

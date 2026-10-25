@@ -1,5 +1,8 @@
 """design.from_screenshot: reference screenshot -> HTML/CSS approximation, then iterate:
-render -> compare (perceptual similarity) -> adjust, until close or a step limit hits."""
+render -> compare (perceptual similarity) -> adjust, until close or a step limit hits.
+
+Geometry comes from pixel segmentation (uniform boxes + text runs); semantics (button, input, nav, card,
+table, modal, icon) from the vision net's UI detector where they overlap."""
 from __future__ import annotations
 
 import copy
@@ -7,110 +10,128 @@ import copy
 import numpy as np
 from PIL import Image
 
+from xon.design.segment import segment
 from xon.design.similarity import fidelity
+from xon.vision.ui_detect import iou
 
-
-def _dominant(arr: np.ndarray) -> tuple[int, int, int]:
-    px = (arr.reshape(-1, 3) // 16).astype(np.int32)
-    keys = px[:, 0] * 256 + px[:, 1] * 16 + px[:, 2]
-    k = np.bincount(keys).argmax()
-    sel = arr.reshape(-1, 3)[keys == k]
-    return tuple(int(v) for v in sel.mean(0))
+WORDS = "lorem ipsum dolor sit amet consectetur adipiscing elit sed do eiusmod tempor".split()
 
 
 def _hex(c) -> str:
-    return "#%02x%02x%02x" % tuple(int(max(0, min(255, v))) for v in c)
+    return "#%02x%02x%02x" % tuple(int(max(0, min(255, v))) for v in c[:3])
+
+
+def _label_for(box: dict, dets: list[dict]) -> str:
+    best, lab = 0.0, "div"
+    for d in dets:
+        v = iou((box["x"], box["y"], box["w"], box["h"]), (d["x"], d["y"], d["w"], d["h"]))
+        if v > best:
+            best, lab = v, d["label"]
+    return lab if best >= 0.4 else "div"
 
 
 def initial_layout(img: Image.Image, dets: list[dict]) -> dict:
-    arr = np.asarray(img.convert("RGB"))
-    H, W = arr.shape[:2]
-    border = np.concatenate([arr[:, :4].reshape(-1, 3), arr[:, -4:].reshape(-1, 3), arr[-4:].reshape(-1, 3)])
-    bg = _dominant(border)
-    els = []
-    for d in sorted(dets, key=lambda d: -(d["w"] * d["h"])):
-        x0, y0 = max(0, int(d["x"])), max(0, int(d["y"]))
-        x1, y1 = min(W, int(d["x"] + d["w"])), min(H, int(d["y"] + d["h"]))
-        if x1 - x0 < 3 or y1 - y0 < 3:
-            continue
-        reg = arr[y0:y1, x0:x1]
-        fill = _dominant(reg)
-        els.append({"label": d["label"], "x": x0, "y": y0, "w": x1 - x0, "h": y1 - y0, "fill": _hex(fill)})
-    return {"bg": _hex(bg), "w": W, "h": H, "elements": els, "text": "#222222"}
+    seg = segment(img)
+    W, H = img.size
+
+    def conv(s, out_boxes, out_texts):
+        for b in s["boxes"]:
+            out_boxes.append({"x": b["x"], "y": b["y"], "w": b["w"], "h": b["h"], "fill": _hex(b["fill"]),
+                              "label": _label_for(b, dets), "radius": 6})
+            if b["children"]:
+                conv(b["children"], out_boxes, out_texts)
+        for t in s["texts"]:
+            out_texts.append({"x": t["x"], "y": t["y"], "w": t["w"], "h": t["h"], "color": _hex(t["color"]), "scale": 1.0})
+
+    boxes, texts = [], []
+    conv(seg, boxes, texts)
+    boxes.sort(key=lambda b: -(b["w"] * b["h"]))  # paint large first
+    icons = [d for d in dets if d["label"] == "icon"]
+    return {"bg": _hex(seg["bg"]), "w": W, "h": H, "boxes": boxes, "texts": texts, "icons": icons, "font": "system-ui, sans-serif"}
+
+
+def _text_span(t: dict, font: str, i: int) -> str:
+    fs = max(8, round(t["h"] * 1.0 * t.get("scale", 1.0)))
+    n_chars = max(1, int(t["w"] / (fs * 0.52)))
+    words, s, k = [], 0, i
+    while s < n_chars:
+        w = WORDS[k % len(WORDS)]
+        words.append(w)
+        s += len(w) + 1
+        k += 1
+    txt = " ".join(words)[:n_chars]
+    weight = 700 if t["h"] >= 20 else 400
+    return (f'<span style="position:absolute;left:{t["x"]}px;top:{t["y"] - round(fs * 0.12)}px;width:{t["w"] + 4}px;'
+            f'height:{t["h"] + 4}px;overflow:hidden;white-space:nowrap;font:{weight} {fs}px/{t["h"]}px {font};color:{t["color"]}">{txt}</span>')
 
 
 def layout_to_html(L: dict) -> str:
     parts = []
-    for e in L["elements"]:
-        st = f"position:absolute;left:{e['x']}px;top:{e['y']}px;width:{e['w']}px;height:{e['h']}px;background:{e['fill']};"
-        lab = e["label"]
+    for b in L["boxes"]:
+        st = (f"position:absolute;left:{b['x']}px;top:{b['y']}px;width:{b['w']}px;height:{b['h']}px;"
+              f"background:{b['fill']};border-radius:{b['radius']}px;box-sizing:border-box;")
+        lab = b["label"]
         if lab == "button":
-            parts.append(f'<button data-xon="button" style="{st}border:0;border-radius:6px;color:#fff;font:600 13px sans-serif">Button</button>')
+            parts.append(f'<button data-xon="button" style="{st}border:0;padding:0"></button>')
         elif lab == "input":
-            parts.append(f'<input data-xon="input" aria-label="field" placeholder="Text" style="{st}border:1px solid #999;border-radius:6px;padding:0 8px;box-sizing:border-box">')
+            parts.append(f'<input data-xon="input" aria-label="field" style="{st}border:1px solid #8888">')
         elif lab == "nav":
-            parts.append(f'<nav data-xon="nav" style="{st}border-bottom:1px solid #0002;font:700 16px sans-serif;color:{L["text"]};padding:0 16px;box-sizing:border-box;display:flex;align-items:center">Brand</nav>')
-        elif lab == "card":
-            parts.append(f'<div data-xon="card" style="{st}border-radius:8px;box-shadow:0 1px 3px #0002;padding:10px;box-sizing:border-box;color:{L["text"]};font:600 15px sans-serif">Title</div>')
+            parts.append(f'<nav data-xon="nav" style="{st}border-radius:0"></nav>')
         elif lab == "table":
-            rows = max(2, e["h"] // 26)
-            cols = max(2, e["w"] // 120)
-            cells = "".join("<tr>" + "".join('<td style="border:1px solid #9995;padding:4px">x</td>' for _ in range(cols)) + "</tr>" for _ in range(rows))
-            parts.append(f'<table data-xon="table" style="{st}border-collapse:collapse;font:13px sans-serif">{cells}</table>')
+            parts.append(f'<div data-xon="table" style="{st}border-radius:0"></div>')
         elif lab == "modal":
-            parts.append(f'<div data-xon="modal" role="dialog" aria-label="dialog" style="{st}border-radius:8px;box-shadow:0 8px 30px #0006"></div>')
-        elif lab == "icon":
-            parts.append(f'<svg data-xon="icon" style="position:absolute;left:{e["x"]}px;top:{e["y"]}px" width="{e["w"]}" height="{e["h"]}" viewBox="0 0 24 24"><circle cx="12" cy="12" r="9" fill="none" stroke="{e["fill"]}" stroke-width="2"/></svg>')
+            parts.append(f'<div data-xon="modal" role="dialog" aria-label="dialog" style="{st}"></div>')
+        elif lab == "card":
+            parts.append(f'<div data-xon="card" style="{st}box-shadow:0 1px 3px #0002"></div>')
+        else:
+            parts.append(f'<div style="{st}"></div>')
+    for i, t in enumerate(L["texts"]):
+        parts.append(_text_span(t, L["font"], i))
     return (f'<!DOCTYPE html><html lang="en"><head><meta charset="utf-8"><style>body{{margin:0;background:{L["bg"]};'
             f'width:{L["w"]}px;height:{L["h"]}px;position:relative;overflow:hidden}}</style></head><body>' + "".join(parts) + "</body></html>")
 
 
-def refine(target: Image.Image, L: dict, renderer, steps: int = 12) -> tuple[dict, list[float]]:
-    """Coordinate descent over element fills, bg and text color; keeps only improving moves."""
+def refine(target: Image.Image, L: dict, renderer, steps: int = 8) -> tuple[dict, list[float]]:
+    """Coordinate descent on global parameters (font, radius, text scale, box/text subsets); keeps improving moves."""
     W, H = target.size
-    arr_t = np.asarray(target.convert("RGB"))
 
     def score(LL):
         return fidelity(renderer.screenshot_html(layout_to_html(LL), W, H), target)
 
     best = score(L)
     hist = [best]
-    for step in range(steps):
-        improved = False
+    moves = [
+        lambda c: c.update(font="Georgia, serif"),
+        lambda c: c.update(font="'Courier New', monospace"),
+        lambda c: c.update(font="Verdana, sans-serif"),
+        lambda c: [t.update(scale=0.85) for t in c["texts"]],
+        lambda c: [t.update(scale=1.15) for t in c["texts"]],
+        lambda c: [b.update(radius=0) for b in c["boxes"]],
+        lambda c: [b.update(radius=12) for b in c["boxes"]],
+        lambda c: c.update(texts=[t for t in c["texts"] if t["w"] > 6]),
+        lambda c: c.update(boxes=[b for b in c["boxes"] if b["w"] * b["h"] > 400]),
+    ]
+    for step, mv in enumerate(moves[:steps]):
         cand = copy.deepcopy(L)
-        # 1) re-sample fills from the target, excluding pixels covered by children
-        if step == 0:
-            for e in cand["elements"]:
-                reg = arr_t[e["y"]:e["y"] + e["h"], e["x"]:e["x"] + e["w"]]
-                if reg.size:
-                    e["fill"] = _hex(np.median(reg.reshape(-1, 3), 0))
-        # 2) try removing the weakest element / swapping text color
-        elif step % 3 == 1 and cand["elements"]:
-            idx = (step // 3) % len(cand["elements"])
-            cand["elements"].pop(idx)
-        elif step % 3 == 2:
-            cand["text"] = "#f2f4f7" if cand["text"] == "#222222" else "#222222"
-        else:
-            for e in cand["elements"]:
-                e["x"], e["y"] = max(0, e["x"] + (1 if step % 2 else -1)), e["y"]
+        mv(cand)
         s = score(cand)
         if s > best + 1e-4:
-            L, best, improved = cand, s, True
+            L, best = cand, s
         hist.append(best)
         if best > 0.97:
             break
-        _ = improved
     return L, hist
 
 
-def from_screenshot(target: Image.Image, vision_model, renderer, steps: int = 12, thresh: float = 0.35) -> dict:
+def from_screenshot(target: Image.Image, vision_model, renderer, steps: int = 8, thresh: float = 0.35) -> dict:
     from xon.vision.predict import detect
+    target = target.convert("RGB")
     dets = detect(vision_model, target, thresh) if vision_model is not None else []
     L0 = initial_layout(target, dets)
     W, H = target.size
-    blank = {"bg": L0["bg"], "w": W, "h": H, "elements": [], "text": "#222222"}
+    blank = {"bg": L0["bg"], "w": W, "h": H, "boxes": [], "texts": [], "icons": [], "font": L0["font"]}
     base_score = fidelity(renderer.screenshot_html(layout_to_html(blank), W, H), target)
     L, hist = refine(target, L0, renderer, steps)
     html = layout_to_html(L)
-    return {"html": html, "layout": L, "detections": len(dets), "baseline_bg_only": base_score,
-            "initial": hist[0], "final": hist[-1], "history": hist}
+    return {"html": html, "layout": L, "detections": len(dets), "boxes": len(L["boxes"]), "texts": len(L["texts"]),
+            "baseline_bg_only": base_score, "initial": hist[0], "final": hist[-1], "history": hist}
