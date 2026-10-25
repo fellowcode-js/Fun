@@ -15,7 +15,7 @@ from xon.lm import data as lmdata
 from xon.lm.model import LMConfig
 from xon.pipeline.store import iter_records
 from xon.tokenizer import BPETokenizer
-from xon.trainer.promote import Registry, decide
+from xon.trainer.promote import COMPONENTS, Registry, decide_components
 from xon.trainer.replay import Replay
 from xon.workstation.governor import Governor
 
@@ -101,11 +101,17 @@ class Cycle:
         minutes = self.cfg["lm"]["minutes"] if not self.quick else 0.5
         batch = 16
         steps = int(self.plan.get("tokens", 20 * lmcfg.n_params()) / (batch * lmcfg.seq_len) / max(1, self.cfg.get("cycles", 1)))
-        steps = max(50, min(steps, 100_000)) if not self.quick else 60
-        out = self.ck / f"cycle-{cycle:03d}" / "lm"
         prom = self.ck / "promoted" / "lm.pt"
+        # incremental cycles: cap at 3 epochs over this cycle's data and fine-tune at a lower LR (avoids the
+        # overfit/forgetting that made cycle 2 regress)
+        epochs_cap = int(3 * len(train_ids) / (batch * lmcfg.seq_len))
+        if prom.exists():
+            steps = min(steps, epochs_cap)
+        steps = max(50, min(steps, 100_000)) if not self.quick else 60
+        lr = self.cfg["lm"].get("lr", 3e-3) * (0.3 if prom.exists() else 1.0)
+        out = self.ck / f"cycle-{cycle:03d}" / "lm"
         r = lmtrain.train(lmcfg, train_ids, val_ids, out, max_steps=steps, max_minutes=minutes, batch=batch,
-                          lr=self.cfg["lm"].get("lr", 3e-3), warmup=min(100, steps // 10 + 1), eval_every=max(50, steps // 8),
+                          lr=lr, warmup=min(100, steps // 10 + 1), eval_every=max(50, steps // 8),
                           init_from=prom if prom.exists() else None, resume=True, seed=self.cfg["xon"]["seed"] + cycle,
                           log_path=self.logs / "lm_train.jsonl", gov=self.gov)
         r.update({"train_tokens": int(len(train_ids)), "val_tokens": int(len(val_ids)), "path": str(out / "model.pt")})
@@ -193,7 +199,7 @@ class Cycle:
         n_pseudo = self.pseudo_label(image_recs)
         text_recs = [r for r in recs if r.get("kind") in ("code", "text", "instruct")] + [
             {k: v for k, v in u.items() if k in ("kind", "description", "html", "license", "source")} for u in ui]
-        replay = self.replay.sample(min(len(self.replay.items), max(200, len(text_recs) // 2)))
+        replay = self.replay.sample(len(self.replay.items))  # full replay buffer mixed with new data
         status_write(self.cfg, phase="tokenizer")
         tok = self.tokenizer(text_recs + replay)
         status_write(self.cfg, phase="train_lm")
@@ -204,13 +210,28 @@ class Cycle:
         metrics = self.evaluate(Path(lm["path"]), Path(vis["path"]), tok)
         detail = metrics.pop("_detail")
         best = self.reg.best_metrics()
-        d = decide(metrics, best, self.cfg["promote"]["noise_margin"], self.cfg["promote"]["max_regression"])
-        if d["promote"]:
-            self.reg.promote({"lm.pt": Path(lm["path"]), "vision.pt": Path(vis["path"]), "tokenizer.json": self.ck / "tokenizer.json"}, metrics, c)
+        dc = decide_components(metrics, best, self.cfg["promote"]["noise_margin"], self.cfg["promote"]["max_regression"])
+        files = {}
+        if dc["lm"]["promote"]:
+            files.update({"lm.pt": Path(lm["path"]), "tokenizer.json": self.ck / "tokenizer.json"})
+        if dc["vision"]["promote"]:
+            files["vision.pt"] = Path(vis["path"])
+        merged = dict(best or {})
+        for comp, keys in COMPONENTS.items():
+            if dc[comp]["promote"]:
+                merged.update({k: metrics[k] for k in keys if k in metrics})
+        for k, v in metrics.items():  # tool-level metrics (contrast, critique...) follow the latest run
+            if not any(k in keys for keys in COMPONENTS.values()):
+                merged[k] = v
+        if files:
+            self.reg.promote(files, merged, c)
+        d = {"promote": bool(files), "reason": "; ".join(f"{k}: {'PROMOTED' if v['promote'] else 'rolled back'} ({v['reason']})"
+                                                       for k, v in dc.items())}
         self.replay.add([r for r in text_recs if r.get("kind") != "ui"][:2000] + [
             {k: v for k, v in u.items() if k in ("kind", "description", "html", "license", "source")} for u in ui[:200]])
         self.replay.save()
         rec = {"cycle": c, "promoted": d["promote"], "reason": d["reason"], "metrics": metrics,
+               "components": {k: v["promote"] for k, v in dc.items()},
                "lm": {k: v for k, v in lm.items() if k != "events"}, "lm_events": lm["events"],
                "vision": {k: v for k, v in vis.items() if k != "events"}, "vision_events": vis["events"],
                "data": {"new_records": len(recs), "web_images": len(image_recs), "pseudo_labeled": n_pseudo,

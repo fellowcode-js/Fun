@@ -42,5 +42,15 @@ Re-read this first when resuming. Newest entries at the bottom of each section.
   docs.python.org at 2 s spacing during the first live crawl). Regression test added.
 - FIXED: stdlib robotparser ignores fractional Crawl-delay; XON parses it itself.
 
+## Results so far
+- Cycle 1 (16.4 min): promoted. ppl 18.8, pass@k 0, blind bug-fix 11/15, fidelity 0.926 (bg-only 0.788),
+  UI F1 0.40, recognition 0.978, zero-shot 0.83.
+- Cycle 2: ROLLED BACK by the gate (ppl regressed 72%: fixed step budget on 34 new records overfit). Vision had
+  improved (UI F1 0.53) but was discarded with it.
+  -> Fix: LM and vision now promoted independently; LM increments capped at 3 epochs, full replay, 0.3x LR.
+  -> Open-dataset pulls resume from a saved offset (new rows each round).
+- Gates: M0 PASS (fresh home, 16.7 min), M1 PASS, M2 PASS (stability smoke only, no GPU), M3 PASS, M4 PASS.
+- M4 found a test gap: the agent's first patch (`<= 40`) passed tests; added a boundary test, now it restores `< 40`.
+
 ## In progress / next
-- Gates M0-M4, REPORT generator, full Tier A cycle, screenshots, Dockerfile, docs, zip.
+- Cycle 3 via `xon start --all`, then `xon stop`; screenshots batch 2; report; zip + clean-dir install test.

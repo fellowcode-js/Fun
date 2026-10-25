@@ -34,3 +34,21 @@ def test_registry_promote_atomic(tmp_path):
     f.write_bytes(b"v2")
     r.promote({"lm.pt": f}, {**BEST, "code_ppl": 10}, cycle=2)
     assert (r.promoted / "lm.pt").read_bytes() == b"v2" and not list(tmp_path.glob(".stage-*"))
+
+
+def test_components_promote_independently():
+    from xon.trainer.promote import decide_components
+    c = {**BEST, "code_ppl": 30.0, "ui_f1": 0.55, "recog_top1": 0.99}  # LM regressed, vision improved
+    d = decide_components(c, BEST)
+    assert not d["lm"]["promote"] and d["vision"]["promote"]
+
+
+def test_registry_carries_over_unpromoted_files(tmp_path):
+    r = Registry(tmp_path)
+    a, b = tmp_path / "a", tmp_path / "b"
+    a.write_bytes(b"lm1")
+    b.write_bytes(b"vis1")
+    r.promote({"lm.pt": a, "vision.pt": b}, BEST, 1)
+    b.write_bytes(b"vis2")
+    r.promote({"vision.pt": b}, BEST, 2)
+    assert (r.promoted / "lm.pt").read_bytes() == b"lm1" and (r.promoted / "vision.pt").read_bytes() == b"vis2"

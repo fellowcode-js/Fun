@@ -54,12 +54,12 @@ def _rows(dataset: str, cfg: str, split: str, offset: int, length: int = 100, ti
     return [x["row"] for x in r.json().get("rows", [])]
 
 
-def fetch_github_code(w: ShardWriter, max_rows: int = 600, max_bytes: int = 4_000_000, gov=None, delay: float = 1.0) -> dict:
+def fetch_github_code(w: ShardWriter, max_rows: int = 600, max_bytes: int = 4_000_000, gov=None, delay: float = 1.0,
+                      offset: int = 0) -> dict:
     s = sources()["github_code_clean"]
     allow = set(s["allow_row_licenses"])
     kept = seen = total = 0
     lic_skip = 0
-    offset = 0
     while seen < max_rows and total < max_bytes:
         if gov:
             gov.tick()
@@ -89,7 +89,7 @@ def fetch_github_code(w: ShardWriter, max_rows: int = 600, max_bytes: int = 4_00
                 kept += 1
                 total += len(code)
         time.sleep(delay)
-    return {"seen": seen, "kept": kept, "bytes": total, "license_skipped": lic_skip}
+    return {"seen": seen, "kept": kept, "bytes": total, "license_skipped": lic_skip, "next_offset": offset}
 
 
 def fetch_mbpp(w: ShardWriter, gov=None) -> dict:
@@ -112,19 +112,29 @@ def fetch_mbpp(w: ShardWriter, gov=None) -> dict:
 
 def run(cfg: dict | None = None, shard_dir: Path | None = None, online: bool = True, gov=None,
         max_rows: int = 600) -> dict:
+    """First call: stdlib + MBPP + first slice of github-code. Later calls (refresh): next github-code slice only."""
+    import json
     cfg = cfg or config.load()
     shard_dir = shard_dir or config.path(cfg, "exchange") / "shards"
+    state_f = config.path(cfg, "data") / "open_state.json"
+    state = json.loads(state_f.read_text()) if state_f.exists() else {"rounds": 0, "github_offset": 0}
     guard = EvalGuard(config.path(cfg, "evalsets"))
-    out = {}
+    out = {"round": state["rounds"] + 1}
     w = ShardWriter(shard_dir, "open", guard=guard)
-    out["python_stdlib"] = fetch_stdlib(w, gov=gov)
+    if state["rounds"] == 0:
+        out["python_stdlib"] = fetch_stdlib(w, gov=gov)
     if online:
-        for name, fn in (("github_code_clean", lambda: fetch_github_code(w, max_rows=max_rows, gov=gov)),
-                         ("mbpp", lambda: fetch_mbpp(w, gov=gov))):
+        jobs = [("github_code_clean", lambda: fetch_github_code(w, max_rows=max_rows, gov=gov, offset=state["github_offset"]))]
+        if state["rounds"] == 0:
+            jobs.append(("mbpp", lambda: fetch_mbpp(w, gov=gov)))
+        for name, fn in jobs:
             try:
                 out[name] = fn()
             except Exception as e:
                 out[name] = {"error": str(e)[:200]}
+        state["github_offset"] = out.get("github_code_clean", {}).get("next_offset", state["github_offset"])
+    state["rounds"] += 1
+    state_f.write_text(json.dumps(state))
     w.close()
     out["dropped_eval_collisions"] = w.dropped_eval
     out["shards"] = w.written

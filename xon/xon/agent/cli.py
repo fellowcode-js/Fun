@@ -114,6 +114,16 @@ def cmd_start(a):
     if a.all:
         crawl_args = ["start", "--node", "crawler", "--interval", str(a.interval)] + (["--mock"] if a.mock else [])
         procs["crawler"] = _start_proc(crawl_args, logs / "crawler_node.log")
+        # let the crawler finish its first round so the trainer sees fresh shards
+        hb = config.path(cfg, "exchange") / "heartbeats" / "crawler.json"
+        t_wait = time.time()
+        while time.time() - t_wait < 900 and procs["crawler"].poll() is None and not gov.stopped():
+            try:
+                if json.loads(hb.read_text()).get("phase") in ("sleep", "halted") and hb.stat().st_mtime > t_wait:
+                    break
+            except (OSError, ValueError):
+                pass
+            time.sleep(1)
         procs["trainer"] = _start_proc(["start", "--node", "trainer", "--cycles", str(a.cycles)] + (["--quick"] if a.quick else []),
                                        logs / "trainer_node.log")
     print(f"XON nodes started: {', '.join(procs) or 'agent only'} (logs in {logs}). `xon stop` or the STOP button halts all.")
@@ -125,6 +135,9 @@ def cmd_start(a):
                 break
             if procs and all(p.poll() is not None for p in procs.values()) and not a.keep_alive:
                 print("XON: all nodes finished")
+                break
+            if "trainer" in procs and procs["trainer"].poll() is not None and not a.keep_alive:
+                print("XON: trainer finished its cycles; stopping (use --keep-alive to keep crawling)")
                 break
             time.sleep(1)
     except KeyboardInterrupt:

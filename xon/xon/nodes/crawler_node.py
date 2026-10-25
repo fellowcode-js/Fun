@@ -35,10 +35,7 @@ def crawl_once(cfg: dict, mock: bool | None = None, max_pages: int | None = None
     stats["clean"] = process_raw(raw, local_shards, config.path(cfg, "evalsets"))
     if open_data:
         from xon.datasets import fetch_open
-        flag = config.path(cfg, "data") / "open_fetched.flag"
-        if not flag.exists():
-            stats["open"] = fetch_open.run(cfg, local_shards, online=(live if online_open is None else online_open), gov=gov)
-            flag.write_text(str(time.time()))
+        stats["open"] = fetch_open.run(cfg, local_shards, online=(live if online_open is None else online_open), gov=gov)
     n = make_transport(cfg).push(local_shards, "shards")
     stats["pushed_files"] = n
     config.jsonl_append(config.path(cfg, "exchange") / "crawl_stats.jsonl", stats)
