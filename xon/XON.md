@@ -17,3 +17,5 @@ X-87 "X-Over-Node" (XON): a coding + design workstation. Crawler, trainer and ag
 - `xon/crawler` polite crawler, `xon/pipeline` cleaning + shards, `xon/datasets` open data + synthetic UI
 - `xon/lm` code LM, `xon/vision` vision net, `xon/design` design tools, `xon/trainer` cycle + promotion
 - `xon/agent` CLI, loop, tools, backends, manager; `xon/workstation` init/doctor/governor/dashboard
+
+Related: [README.md](README.md) (usage), [PROGRESS.md](PROGRESS.md) (decisions behind these rules).

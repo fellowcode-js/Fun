@@ -49,3 +49,5 @@ url = "s3://my-bucket/xon"   # XON_S3_ENDPOINT=... for MinIO/R2/B2; pip install 
 ## 7. Stop
 `xon stop` (or the dashboard STOP button) halts every node within seconds. Governor caps in `xon.toml [governor]`
 (disk, bandwidth, requests/hour, GPU hours) are hard limits.
+
+Related: [README.md](../README.md) (Tier A quick start), [REPORT.md](../REPORT.md) (what Tier A measured; Tier B/C untrained).

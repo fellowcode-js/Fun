@@ -136,3 +136,5 @@ third-party model license. Trained checkpoints are **not** shipped in the zip.
 - The NSFW/violence filter is a keyword screen, not a classifier; the private-person image filter relies on captions.
 - `from_screenshot` uses placeholder text (no OCR) and the vision->LM bridge is implemented but untrained at Tier A.
 - The rules planner does not understand arbitrary tasks.
+
+Related: [PROGRESS.md](PROGRESS.md) (how these results were reached), [XON.md](XON.md) (agent rules), [README.md](README.md) (usage).

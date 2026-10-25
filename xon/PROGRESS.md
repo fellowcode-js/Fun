@@ -54,3 +54,5 @@ Re-read this first when resuming. Newest entries at the bottom of each section.
 
 ## In progress / next
 - Cycle 3 via `xon start --all`, then `xon stop`; screenshots batch 2; report; zip + clean-dir install test.
+
+Related: [REPORT.md](REPORT.md) (measured results this log leads to), [XON.md](XON.md) (rules decided along the way).

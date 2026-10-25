@@ -11,6 +11,13 @@ and its pass@k on unseen problems is ~0. What works well at Tier A is measured i
 (computed contrast, critique, palettes, screenshot→HTML reconstruction), UI-element detection, recognition, search-based
 bug repair, the polite crawler/cleaning pipeline, and the full self-training loop with promotion gating.
 
+## Documents
+- [REPORT.md](REPORT.md): what XON measurably does, every number from an eval, gate results, live vs mock, limits.
+- [PROGRESS.md](PROGRESS.md): build log (done, decisions, incidents, next); read first when resuming work.
+- [XON.md](XON.md): project memory the agent loads every session; rules for agents editing this repo.
+- [docs/cloud.md](docs/cloud.md): copy-paste steps for a rented GPU box (Tier B/C), Docker, split nodes, spot.
+- [data/samples/README.md](data/samples/README.md): the tiny license-clean samples that ship in the zip.
+
 ## Quick start
 ```bash
 unzip xon.zip && cd xon
@@ -57,3 +64,5 @@ and fixes a seeded bug in XON's pipeline). Results land in `REPORT.md` via `xon 
 robots.txt + crawl-delay, honest user agent with contact, per-domain limits, allowlist/denylist, no forms or logins,
 license captured per item (no-train and all-rights-reserved skipped), PII and secrets scrubbed, unsafe content
 quarantined, design tools refuse to reproduce named brands' logos or trade dress. No scraped data ships in the zip.
+
+Related: [REPORT.md](REPORT.md) (measured results), [PROGRESS.md](PROGRESS.md) (build log), [docs/cloud.md](docs/cloud.md) (GPU setup).
