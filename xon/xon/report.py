@@ -61,6 +61,19 @@ def build(cfg: dict) -> str:
                  f"{_fmt(m.get('bugfix_blind_rate'))} | {_fmt(m.get('design_fidelity'))} | {_fmt(m.get('ui_f1'))} | "
                  f"{_fmt(m.get('recog_top1'))} | {_fmt(m.get('recog_zero_shot'))} | {_fmt(h.get('minutes'), 1)} min |")
     L.append("\nTiers B and C were **not trained** (no GPU available). Their configs exist and are sized by the same code.\n")
+    pe = _j(ck / "pretrained_eval.json", None)
+    if pe:
+        L.append(f"### Warm-start coder: {pe['model']} ({pe['license']}), CPU inference, frozen XON eval sets\n")
+        L.append("| eval | pass@1 | pass@5 | greedy solved | solved by any of 5 |\n|---|---|---|---|---|")
+        for lang, key in (("Python (62 problems)", "python"), ("C++ (28 problems)", "cpp")):
+            r = pe[key]
+            L.append(f"| {lang} | {_fmt(r['pass@1'])} | {_fmt(r['pass@5'])} | {r['greedy_solved']}/{r['problems']} | {r['solved_any']}/{r['problems']} |")
+        bb, cb = pe.get("bugfix_blind.jsonl_combined", {}), pe.get("cpp_bugfix_blind.jsonl_combined", {})
+        L.append(f"\nBug repair, blind sets, mutation search then LLM rewrite (every candidate verified by tests): Python "
+                 f"{bb.get('repair_fixed')}/{bb.get('cases')} (by stage {bb.get('fixed_by_stage')}), C++ {cb.get('repair_fixed')}/{cb.get('cases')}. "
+                 f"LLM rewrite alone (4 samples): dev {_fmt(pe.get('bugfix_rewrite_rate@4'))}, blind {_fmt(pe.get('bugfix_blind_rewrite_rate@4'))}.\n")
+        L.append("Caveat: these problems are short and XON-written; the pretrained model may have seen similar functions in its "
+                 "pretraining data, which cannot be ruled out.\n")
     if hist:
         h = hist[-1]
         det = _j(ck / f"cycle-{h['cycle']:03d}" / "eval_detail.json", {})
@@ -73,6 +86,10 @@ def build(cfg: dict) -> str:
         L.append(f"| bug-fix, dev set ({bf.get('cases')}) | {_fmt(m['bugfix_rate'])} | LM-only {_fmt(m['bugfix_lm_only'])} | repair tool tuned on this set |")
         L.append(f"| bug-fix, **blind** set ({bfb.get('cases')}) | {_fmt(m['bugfix_blind_rate'])} | LM-only {_fmt(m['bugfix_blind_lm_only'])} | never used for tuning |")
         L.append(f"| screenshot->code fidelity ({det.get('fidelity', {}).get('images')} held-out) | {_fmt(m['design_fidelity'])} | bg-only {_fmt(m['design_fidelity_baseline'])}, first layout {_fmt(m['design_fidelity_initial'])} | SSIM+color+edge, 0..1 |")
+        if "ui_f1_v2" in m:
+            L.append(f"| UI detection F1, v2 GUIs (13 classes) | {_fmt(m['ui_f1_v2'])} | – | per class: {det.get('ui_v2', {}).get('per_class_f1')} |")
+        if "cpp_pass@1" in m:
+            L.append(f"| XON LM C++ pass@1 / pass@5 | {_fmt(m['cpp_pass@1'])} / {_fmt(m['cpp_pass@5'])} | 0 | from-scratch model |")
         L.append(f"| UI detection P / R / F1 @IoU0.5 | {_fmt(m['ui_precision'])} / {_fmt(m['ui_recall'])} / {_fmt(m['ui_f1'])} | – | per class: {det.get('ui', {}).get('per_class_f1')} |")
         L.append(f"| recognition top-1 / top-5 / zero-shot | {_fmt(m['recog_top1'])} / {_fmt(m['recog_top5'])} / {_fmt(m['recog_zero_shot'])} | 0.100 | 10 procedural classes, 500 held-out |")
         L.append(f"| contrast checker accuracy | {_fmt(m['contrast_accuracy'])} | – | {det.get('contrast', {}).get('cases')} WCAG reference pairs |")

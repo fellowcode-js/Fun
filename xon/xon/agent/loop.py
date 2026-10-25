@@ -84,7 +84,7 @@ class Agent:
                         summary = {"stopped": "step limit"}
                         break
                     res = self.call(ctx, art, name, args)
-                    if not res.get("ok", True):
+                    if not res.get("ok", True) and res.get("error"):  # tool errors, not expected test failures
                         failures.append(f"{name}:{res.get('error')}")
                         if len(failures) >= 3 and len(set(failures[-3:])) == 1:
                             summary = {"stopped": "three identical failures", "error": failures[-1]}

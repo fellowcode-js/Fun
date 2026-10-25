@@ -101,7 +101,7 @@ class PretrainedCoder:
             outs.append((m[-1] if m else reply).strip() + "\n")
         return outs if n > 1 else outs[0]
 
-    def write_code(self, task: str, lang: str = "python", feedback: str = "") -> dict:
+    def write_code(self, task: str, lang: str = "python", feedback: str = "", temperature: float = 0.0) -> dict:
         """Task -> code + tests (one fenced block each). feedback carries the previous attempt's failure."""
         fb = f"\n\nYour previous attempt failed:\n```\n{feedback[-1500:]}\n```\nFix it." if feedback else ""
         tests_hint = ("Then a second ```python block with pytest-style test functions (def test_...) that import nothing "
@@ -109,9 +109,18 @@ class PretrainedCoder:
                       "Then a second ```cpp block containing only an int main() that checks results and returns 1 on failure.")
         reply = self.chat([{"role": "system", "content": "You are a careful senior engineer. Write small, correct, tested code."},
                            {"role": "user", "content": f"Task: {task}{fb}\n\nFirst a ```{lang} block with the implementation. {tests_hint}"}],
-                          max_new=900)
+                          max_new=900, temperature=temperature)
         blocks = re.findall(r"```[a-zA-Z+]*\n(.*?)```", reply, re.S)
         return {"code": blocks[0] if blocks else reply, "tests": blocks[1] if len(blocks) > 1 else "", "raw": reply}
+
+    def cpp_tests(self, task: str, code: str) -> str:
+        """A focused second call: an int main() with assert checks for the given implementation's functions."""
+        sigs = "\n".join(l for l in code.splitlines() if re.match(r"^[\w:<>,\s\*&]+\s+\w+\s*\([^;]*\)\s*\{?\s*$", l) and "main" not in l)
+        reply = self.chat([{"role": "user", "content": f"Task: {task}\nFunctions available:\n```cpp\n{sigs}\n```\n"
+                            "Write ONLY an `int main()` that checks at least 4 cases (including edge cases) with assert() from <cassert> "
+                            "and returns 0. Do not redefine the functions. One ```cpp block."}], max_new=500)
+        m = re.findall(r"```[a-zA-Z+]*\n(.*?)```", reply, re.S)
+        return m[-1] if m else reply
 
     def html_page(self, prompt: str) -> str:
         reply = self.chat([{"role": "system", "content": "You are a UI designer who writes clean, accessible HTML and CSS."},

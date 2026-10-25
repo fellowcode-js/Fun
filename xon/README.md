@@ -10,10 +10,13 @@ them, trains a small code LM and a vision net, evaluates them on frozen sets, pr
 repeats. An agent CLI (`xon`) drives it all, writes code, designs UIs, screenshots and critiques them, and fixes bugs
 — including bugs in XON's own pipeline, on a branch, merged only when tests pass.
 
-**Honest scope:** XON will not match big commercial models. At Tier A (CPU) the code LM is under a million parameters
-and its pass@k on unseen problems is ~0. What works well at Tier A is measured in `REPORT.md`: the design tools
-(computed contrast, critique, palettes, screenshot→HTML reconstruction), UI-element detection, recognition, search-based
-bug repair, the polite crawler/cleaning pipeline, and the full self-training loop with promotion gating.
+**Honest scope:** XON will not match big commercial models. It has two code models:
+- **XON LM**, trained from scratch by the cycle (under a million parameters at Tier A; pass@k on unseen problems ~0).
+- **Warm-start coder**: Qwen2.5-Coder-0.5B-Instruct (Apache-2.0), downloaded on first use, runs on CPU. It does the
+  real code writing (Python and C++), repair rewrites, page drafts and task routing. Disable with `init = "scratch"`.
+
+Every number is in `REPORT.md`. Strongest parts: design tools (computed contrast, critique, palettes, GUI layouts,
+screenshot→HTML), UI-element detection, verified bug repair, and the self-training loop with promotion gating.
 
 ## Documents
 - [REPORT.md](REPORT.md): what XON measurably does, every number from an eval, gate results, live vs mock, limits.
@@ -37,6 +40,10 @@ xon start --all            # crawler + trainer + agent supervisor + dashboard (h
 xon agent "build a todo app called Errands with a teal theme" --mode auto-edit --workspace errands
 xon agent "fix the failing tests in tests/test_pipeline.py"
 xon agent "design a dark landing page with three feature cards and a newsletter form"
+xon agent "design a settings screen with tabs, toggles for email alerts and dark mode, and a volume slider"
+xon agent "design a desktop app window called Pixel Studio with a sidebar with layers, brushes and history"
+xon agent "write a python function called slugify ..., e.g. 'Hello, World!' -> 'hello-world'"
+xon agent "implement a binary search in C++"
 xon design critique --path page.html          # computed WCAG contrast, targets, labels, hierarchy, spacing
 xon design from_screenshot --path shot.png --out recon.html
 xon design palette --base '#e0b000'           # accessible palette, every pair verified
@@ -45,6 +52,16 @@ xon repl                                       # /plan /run /review /test /diff 
 ```
 Permission modes: `ask` (default), `auto-edit`, `full-auto`. Project-dir jail, destructive-command denylist, no secret
 reads, every tool call logged to `artifacts/<task-id>/`. Eval sets, governor and safety filters are protected.
+
+**Tools inside the sandbox (23):** read, write, edit, glob, grep, shell, test, git (checkpoint/undo), web_fetch
+(robots-respecting), view_image, recognize, complete, design (from_prompt / from_screenshot / critique / palette /
+type / tokens), fix (fault localization + mutation search + LLM rewrite, all verified), python_run, cpp_build
+(g++/clang++, optional ASan+UBSan), lint (Python + C++), sqlite, serve (local server + screenshot + DOM checks),
+patch, think (scratchpad), docs_search (BM25 over crawled licensed docs/code), codegen.
+
+**Thinking loops:** write_code = generate code + tests, run, note the failure, retry with the error (tests frozen after
+attempt 1, task examples become authoritative asserts), then repair. Design = best of two engines, then
+critique → fix rounds until the score stops improving. Unknown tasks are routed by the local model.
 
 Brain: an external chat endpoint is used for planning when `ANTHROPIC_API_KEY` or `XON_OPENAI_KEY`/`OPENAI_API_KEY`
 (+`XON_OPENAI_BASE` for any OpenAI-compatible server) is set; otherwise a deterministic **rules planner** handles the
