@@ -81,3 +81,14 @@ def test_pass_at_k_estimator():
     assert pass_at_k(5, 5, 1) == 1.0
     assert abs(pass_at_k(5, 1, 1) - 0.2) < 1e-9
     assert pass_at_k(5, 1, 5) == 1.0
+
+
+def test_vision_bridge_prefix():
+    """Tier B+ screenshot->code bridge: image features become prefix tokens; logits stay aligned to text."""
+    c = LMConfig(vocab_size=300, d_model=64, n_layers=2, n_heads=2, n_kv_heads=1, seq_len=32, n_image_tokens=4, image_dim=128)
+    m = XONLM(c)
+    x = torch.randint(0, 300, (2, 10))
+    logits, loss = m(x[:, :-1], x[:, 1:], image_feats=torch.randn(2, 128))
+    assert logits.shape == (2, 9, 300) and torch.isfinite(loss)
+    loss.backward()
+    assert m.bridge[0].weight.grad is not None

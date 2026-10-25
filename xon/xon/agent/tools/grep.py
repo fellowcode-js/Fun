@@ -7,7 +7,8 @@ def run(ctx, pattern: str, glob: str = "**/*.py") -> dict:
     rx = re.compile(pattern)
     hits = []
     for p in sorted(ctx.root.glob(glob)):
-        if not p.is_file() or ".git" in p.parts or ".xon" in p.parts:
+        rel = p.relative_to(ctx.root).parts
+        if not p.is_file() or ".git" in rel or ".xon" in rel:
             continue
         try:
             for i, line in enumerate(p.read_text(errors="ignore").splitlines(), 1):

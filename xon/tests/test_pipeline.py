@@ -24,6 +24,8 @@ def test_code_filters_and_near_dedupe():
     code = "def f(x):\n    return x + 1\n\n\ndef g(y):\n    return y * 2\n"
     assert clean_code.reject_reason(code, "python", "MIT") is None
     assert clean_code.reject_reason(code, "python", "GPL-3.0").startswith("license")
+    assert clean_code.reject_reason("x = 1  # " + "a" * 31, "python", "MIT") is None  # exactly 40 chars is kept
+    assert clean_code.reject_reason("x = 1  # " + "a" * 30, "python", "MIT") == "too_short"
     assert clean_code.reject_reason("x=1;" * 400, "javascript", "MIT") == "minified"
     assert clean_code.reject_reason("# @generated do not edit\n" + code, "python", "MIT") == "generated"
     d = clean_code.MinHashDeduper()

@@ -180,7 +180,7 @@ def m4(cfg: dict, quick: bool = False) -> dict:
         os.environ.update(old)
     wt = Path(meta["worktree"])
     fixed_src = (wt / "xon" / "pipeline" / "clean_code.py").read_text()
-    seed_line = "if len(code) > 40"
+    seed_line = "if len(code) > 40:"
     # self-improvement gate: tests + no regression on a pipeline metric (mock-crawl processing stats) vs. pre-bug code
     gate_tests = subprocess.run([sys.executable, "-m", "pytest", "-q", "-p", "no:cacheprovider", "tests/test_pipeline.py",
                                  "tests/test_crawler.py"], cwd=wt, capture_output=True, text=True, env={**xenv, "PYTHONPATH": str(wt)})
@@ -200,7 +200,7 @@ def m4(cfg: dict, quick: bool = False) -> dict:
     if gate_tests.returncode == 0 and no_regression:
         merged = manager.collect(xroot, [meta["id"]], require_tests=False)
     part2 = (before.returncode != 0 and gate_tests.returncode == 0 and no_regression and bool(merged and merged[0]["merged"])
-             and ("if len(code) < 40" in fixed_src or "if len(code) <= 39" in fixed_src))
+             and seed_line not in fixed_src)
     agent_summary = sorted((wt / "artifacts").glob("*/summary.json"))
     s2 = json.loads(agent_summary[-1].read_text()) if agent_summary else {}
     return {"pass": bool(part1 and part2), "minutes": round((time.time() - t0) / 60, 2),

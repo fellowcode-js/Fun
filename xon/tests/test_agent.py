@@ -109,3 +109,44 @@ def test_agent_builds_todo_app(tmp_path, home):
     assert r["critique_after"] >= r["critique_before"]
     assert (tmp_path / r["artifacts"] / "screenshots" / "after.png").exists()
     assert (tmp_path / r["artifacts"] / "plan.md").exists() and (tmp_path / r["artifacts"] / "log.jsonl").exists()
+
+
+def test_llm_backend_tool_loop_with_fake_openai_server(tmp_path, home, monkeypatch):
+    """Exercise the OpenAI-compatible tool-calling loop against a local fake server (no real API key needed)."""
+    import json
+    import threading
+    from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
+    calls = []
+
+    class H(BaseHTTPRequestHandler):
+        def log_message(self, *a):
+            pass
+
+        def do_POST(self):
+            body = json.loads(self.rfile.read(int(self.headers["Content-Length"])))
+            calls.append(body)
+            if len(calls) == 1:
+                msg = {"role": "assistant", "content": "1. write hello.py", "tool_calls": [{"id": "c1", "type": "function",
+                       "function": {"name": "write", "arguments": json.dumps({"path": "hello.py", "content": "print('hi')\n"})}}]}
+            else:
+                msg = {"role": "assistant", "content": "Done: wrote hello.py"}
+            out = json.dumps({"choices": [{"message": msg}]}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(out)))
+            self.end_headers()
+            self.wfile.write(out)
+
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), H)
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    monkeypatch.setenv("XON_OPENAI_KEY", "test")
+    monkeypatch.setenv("XON_OPENAI_BASE", f"http://127.0.0.1:{srv.server_address[1]}/v1")
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    git_repo(tmp_path)
+    from xon.agent.loop import Agent
+    r = Agent(tmp_path, home, mode="auto-edit", backend="openai").run("write a hello script")
+    srv.shutdown()
+    assert (tmp_path / "hello.py").read_text() == "print('hi')\n"
+    assert r["backend"] == "openai" and r["summary"] == "Done: wrote hello.py"
+    assert any(t["function"]["name"] == "write" for t in calls[0]["tools"])
+    assert calls[1]["messages"][-1]["role"] == "tool"

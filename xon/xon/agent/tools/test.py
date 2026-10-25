@@ -18,7 +18,8 @@ def detect(root: Path) -> str:
                 return "npm test --silent"
         except Exception:
             pass
-    if any(".xon" not in p.parts for p in list(root.glob("**/test_*.py")) + list(root.glob("**/*_test.py"))) or (root / "pytest.ini").exists():
+    found = list(root.glob("**/test_*.py")) + list(root.glob("**/*_test.py"))
+    if any(".xon" not in p.relative_to(root).parts for p in found) or (root / "pytest.ini").exists():
         return f"{sys.executable} -m pytest -q -x -p no:cacheprovider"
     return f"{sys.executable} -m unittest discover -q"
 
