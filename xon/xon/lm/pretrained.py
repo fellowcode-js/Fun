@@ -33,7 +33,11 @@ class PretrainedCoder:
         dev = "cuda" if torch.cuda.is_available() else "cpu"
         kw = {"cache_dir": str(cache_dir)} if cache_dir else {}
         self.tok = AutoTokenizer.from_pretrained(name, **kw)
-        self.model = AutoModelForCausalLM.from_pretrained(name, dtype=torch.bfloat16 if dev == "cuda" else torch.float32, **kw).to(dev).eval()
+        want = torch.bfloat16 if dev == "cuda" else torch.float32
+        import transformers
+        major = int(transformers.__version__.split(".")[0])
+        dkw = {"dtype": want} if major >= 5 else {"torch_dtype": want}  # kwarg renamed in transformers 5
+        self.model = AutoModelForCausalLM.from_pretrained(name, **dkw, **kw).to(dev).eval()
         self.dev = dev
 
     # ---- raw generation

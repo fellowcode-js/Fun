@@ -29,7 +29,7 @@ screenshot→HTML), UI-element detection, verified bug repair, and the self-trai
 ## Quick start
 ```bash
 unzip xon.zip && cd xon
-./scripts/setup.sh && source .venv/bin/activate
+./scripts/setup.sh && source .venv/bin/activate      # Windows: double-click scripts\setup.bat (untested)
 xon doctor                 # checks Python, torch, GPU, Chromium, disk, network; prints exact fixes
 xon init                   # probes hardware, picks tier A/B/C, sizes the run (try --budget 8h or '$40' --gpu-price 1.2)
 xon start --all            # crawler + trainer + agent supervisor + dashboard (http://127.0.0.1:8787)
