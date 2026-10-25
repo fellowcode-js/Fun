@@ -40,7 +40,7 @@ DEFAULTS: dict = {
         "max_bytes": 2_000_000,
         "live": False,
     },
-    "lm": {"config": "tiny", "init": "scratch", "minutes": 8},
+    "lm": {"config": "tiny", "init": "pretrained", "pretrained": "Qwen/Qwen2.5-Coder-0.5B-Instruct", "minutes": 8},
     "vision": {"config": "tiny", "minutes": 4},
     "agent": {
         "backend": "auto",  # auto | rules | local | openai | anthropic

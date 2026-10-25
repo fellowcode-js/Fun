@@ -34,11 +34,16 @@ def train(pairs: list[dict], ui: list[dict], out_dir: Path, *, minutes: float = 
     out_dir.mkdir(parents=True, exist_ok=True)
     torch.manual_seed(seed)
     rng = random.Random(seed)
-    cfg = cfg or VisionConfig(n_classes=len(SHAPES))
+    from xon.datasets.synth_ui import UI_CLASSES
+    cfg = cfg or VisionConfig(n_classes=len(SHAPES), n_ui=len(UI_CLASSES))
     model = XONVision(cfg)
     if init_from and Path(init_from).exists():
         st = load_ckpt(init_from)
-        model.load_state_dict(st["model"])
+        own = model.state_dict()
+        keep = {k: v for k, v in st["model"].items() if k in own and own[k].shape == v.shape}
+        model.load_state_dict(keep, strict=False)  # head shapes may differ when UI classes are added
+        if len(keep) < len(own):
+            log.info(f"init_from: {len(own) - len(keep)} tensors re-initialized (shape change)")
     opt = torch.optim.AdamW(model.parameters(), lr=lr, weight_decay=0.01)
     X = torch.stack([to_tensor(p["image"], (64, 64)) for p in pairs]) if pairs else None
     caps = [p["caption"] for p in pairs]

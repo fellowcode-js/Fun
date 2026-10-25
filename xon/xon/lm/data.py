@@ -60,12 +60,15 @@ def build_tokenizer(records: list[dict], vocab_size: int, max_chars: int = 3_000
     return BPETokenizer.train(texts, vocab_size=vocab_size)
 
 
-def tokenize(records: list[dict], tok: BPETokenizer, seed: int = 0, repeat: dict | None = None):
-    """Returns (train_ids, val_ids) as int32 arrays. `repeat` up-weights kinds, e.g. {'ui': 2}."""
+def tokenize(records: list[dict], tok: BPETokenizer, seed: int = 0, repeat: dict | None = None, lang_repeat: dict | None = None):
+    """Returns (train_ids, val_ids) as int32 arrays. `repeat` up-weights kinds, e.g. {'ui': 2}; `lang_repeat` up-weights
+    code languages, e.g. {'python': 2, 'cpp': 2}."""
     rng = random.Random(seed)
     train, val = [], []
     for r in records:
         reps = (repeat or {}).get(r.get("kind"), 1)
+        if r.get("kind") == "code":
+            reps *= (lang_repeat or {}).get(r.get("lang"), 1)
         held = is_heldout(r)
         for _ in range(reps if not held else 1):
             d = to_document(r, rng)

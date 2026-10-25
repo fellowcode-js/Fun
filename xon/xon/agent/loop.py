@@ -69,8 +69,9 @@ class Agent:
                 summary = self._llm_loop(task, ctx, art, mem, failures)
                 steps = summary.pop("_steps", 0)
             else:
-                art.write("plan.md", self.backend.plan_text(task))
-                gen = self.backend.recipe(task, workspace)
+                kind = self.backend.route(task, ctx.pretrained()) if hasattr(self.backend, "route") else None
+                art.write("plan.md", self.backend.plan_text(task, kind))
+                gen = self.backend.recipe(task, workspace, kind)
                 res = None
                 while True:
                     try:

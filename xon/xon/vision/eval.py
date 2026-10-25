@@ -34,22 +34,24 @@ def recognition(model, evalsets: Path) -> dict:
             "zero_shot_top1": round(float((zs == y).float().mean()), 4)}
 
 
-def ui_heldout(evalsets: Path, cache: Path, renderer=None) -> list[dict]:
-    """Render (once, cached) the frozen held-out UI seeds."""
-    cache = Path(cache)
+def ui_heldout(evalsets: Path, cache: Path, renderer=None, version: int = 1) -> list[dict]:
+    """Render (once, cached) the frozen held-out UI seeds for a generator version."""
+    cache = Path(cache) if version == 1 else Path(str(cache) + f"_v{version}")
     rows = synth_ui.load_index(cache)
-    seeds = [r["seed"] for r in load(Path(evalsets) / "ui_heldout.jsonl")]
+    fname = "ui_heldout.jsonl" if version == 1 else f"ui_heldout_v{version}.jsonl"
+    seeds = [r["seed"] for r in load(Path(evalsets) / fname)]
     if len(rows) >= len(seeds):
         return rows
     if cache.exists():
         for f in cache.glob("*"):
             f.unlink()
-    return synth_ui.generate(cache, len(seeds), start_seed=seeds[0], renderer=renderer)
+    return synth_ui.generate(cache, len(seeds), start_seed=seeds[0], renderer=renderer, version=version)
 
 
-def ui_detection(model, evalsets: Path, cache: Path, thresh: float = 0.35, renderer=None) -> dict:
+def ui_detection(model, evalsets: Path, cache: Path, thresh: float = 0.35, renderer=None, version: int = 1) -> dict:
     from PIL import Image
-    rows = ui_heldout(evalsets, cache, renderer)
+    rows = ui_heldout(evalsets, cache, renderer, version)
+    cache = Path(cache) if version == 1 else Path(str(cache) + f"_v{version}")
     tp = fp = fn = 0
     per = {}
     for r in rows:

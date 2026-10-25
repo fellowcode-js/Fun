@@ -10,13 +10,13 @@ from pathlib import Path
 # metric -> direction (+1 higher is better, -1 lower is better)
 METRICS = {
     "code_ppl": -1, "code_pass@1": +1, "code_pass@5": +1, "bugfix_rate": +1,
-    "design_fidelity": +1, "ui_f1": +1, "recog_top1": +1, "recog_zero_shot": +1, "contrast_accuracy": +1,
+    "design_fidelity": +1, "ui_f1": +1, "ui_f1_v2": +1, "cpp_pass@1": +1, "bugfix_blind_rate": +1, "recog_top1": +1, "recog_zero_shot": +1, "contrast_accuracy": +1,
 }
-PRIMARY = ["code_ppl", "ui_f1", "recog_top1", "design_fidelity"]
+PRIMARY = ["code_ppl", "ui_f1", "ui_f1_v2", "recog_top1", "design_fidelity"]
 # components are promoted independently: a better vision net is not held back by a worse LM increment
 COMPONENTS = {
     "lm": ["code_ppl", "code_pass@1", "code_pass@5", "bugfix_rate"],
-    "vision": ["ui_f1", "recog_top1", "recog_zero_shot", "design_fidelity"],
+    "vision": ["ui_f1", "ui_f1_v2", "recog_top1", "recog_zero_shot", "design_fidelity"],
 }
 
 

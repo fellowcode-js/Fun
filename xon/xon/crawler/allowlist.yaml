@@ -1,9 +1,10 @@
 # Domains XON may crawl, with the license applied when a page carries no machine-readable one.
 # Anything not listed is skipped. Denied URL patterns apply everywhere.
 allow:
-  docs.python.org: {license: "PSF-2.0", paths: ["/3/"], max_pages: 15}
-  raw.githubusercontent.com: {license: "detect", paths: ["/psf/requests/", "/pallets/click/", "/feathericons/feather/"], max_pages: 10,
-                              repo_licenses: {"/psf/requests/": "Apache-2.0", "/pallets/click/": "BSD-3-Clause", "/feathericons/feather/": "MIT"}}
+  docs.python.org: {license: "PSF-2.0", paths: ["/3/"], max_pages: 30}
+  raw.githubusercontent.com: {license: "detect", paths: ["/psf/requests/", "/pallets/click/", "/feathericons/feather/", "/nlohmann/json/", "/fmtlib/fmt/"], max_pages: 12,
+                              repo_licenses: {"/psf/requests/": "Apache-2.0", "/pallets/click/": "BSD-3-Clause", "/feathericons/feather/": "MIT",
+                                              "/nlohmann/json/": "MIT", "/fmtlib/fmt/": "MIT"}}
   developer.mozilla.org: {license: "CC-BY-SA", paths: ["/en-US/docs/Web/"], max_pages: 10}
   www.w3.org: {license: "W3C-doc", paths: ["/WAI/"], max_pages: 5}
   127.0.0.1: {license: "detect", paths: ["/"], max_pages: 200}

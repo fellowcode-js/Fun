@@ -74,6 +74,48 @@ def parse(prompt: str, seed: int = 0) -> dict:
     return {"palette": spec_pal, "font": font, "radius": radius, "space": 12, "sections": secs, "prompt": prompt}
 
 
+GUI_KINDS = [("window", r"\b(desktop|gui|app window|window|native app|editor|toolbar)\b"),
+             ("settings", r"\b(settings|preferences|options|config(uration)? (page|screen))\b"),
+             ("pricing", r"\b(pricing|plans?|subscription tiers?)\b"),
+             ("app", r"\b(dashboard|admin|sidebar|analytics|crm|back ?office|app)\b")]
+
+
+def parse_gui(prompt: str, seed: int = 0) -> dict | None:
+    """App-style prompts -> v2 GUI spec (sidebar, tabs, toggles, checkboxes, dropdowns, sliders, windows)."""
+    from xon.datasets.synth_ui import SELECTS
+    p = prompt.lower()
+    kind = next((k for k, rx in GUI_KINDS if re.search(rx, p)), None)
+    if kind is None or re.search(r"\b(landing|hero|blog|portfolio)\b", p):
+        return None
+    base = parse(prompt, seed)
+    pal = palette.generate(base["palette"]["primary"], dark=base["palette"]["dark"])["tokens"]
+    spal = {**base["palette"], "on_primary": pal["on-primary"]}
+    title = base["sections"][0]["brand"] if base["sections"] and base["sections"][0]["kind"] == "nav" else "App"
+    def words(rx):
+        """Split 'a, b and c' into items; stop at the next clause ('a language dropdown', 'an image')."""
+        out = []
+        for w in re.split(r",| and ", rx.group(1)) if rx else []:
+            w = w.strip()
+            if re.match(r"(an?|the|with)\b", w):
+                break
+            if w:
+                out.append(w.capitalize())
+        return out
+    side = words(re.search(r"sidebar (?:with |links? )?(?!and\b)([a-z ,]+?)(?:\.|;|$| with| and an?\b)", p)) or (
+        ["Overview", "Projects", "Reports", "Team", "Settings"] if kind in ("app", "settings") or "sidebar" in p else None)
+    tabs = words(re.search(r"tabs? (?:for |called )?([a-z ,]+?)(?:\.|;|$| with)", p)) or (["General", "Advanced", "Privacy"] if "tab" in p or kind == "settings" else None)
+    toggles = words(re.search(r"toggles? (?:for )?([a-z ,-]+?)(?:\.|;|$| with)", p)) or (["Email alerts", "Dark mode"] if kind == "settings" else [])
+    checks = words(re.search(r"checkbox(?:es)? (?:for )?([a-z ,-]+?)(?:\.|;|$| with)", p))
+    sliders = words(re.search(r"sliders? (?:for )?([a-z ,]+?)(?:\.|;|$| with)", p)) or (["Volume"] if "slider" in p else [])
+    selects = [k for k in SELECTS if k.lower() in p] or (["Language", "Theme"] if kind == "settings" or "dropdown" in p else [])
+    stats_n = 4 if kind == "app" else 0
+    return {"v": 2, "kind": kind, "palette": spal, "font": base["font"], "radius": base["radius"], "space": 16, "title": title,
+            "sidebar": side, "tabs": tabs, "toggles": toggles[:4], "checks": checks[:4], "selects": selects[:3], "sliders": sliders[:2],
+            "stats": [(n, v) for n, v in zip(["Users", "Revenue", "Orders", "Uptime"], ["1,284", "$9.4k", "312", "99.9%"])][:stats_n],
+            "table": kind == "app" or "table" in p, "buttons": ["Save", "Cancel"] if kind in ("settings", "window") else ["New report"],
+            "plans": [("Starter", "$9"), ("Pro", "$29"), ("Team", "$79")] if kind == "pricing" else [], "prompt": prompt}
+
+
 def generate(prompt: str, engine: str = "spec", seed: int = 0, lm=None, tok=None, backend=None) -> dict:
     why = brand.check(prompt)
     if why:
@@ -87,8 +129,25 @@ def generate(prompt: str, engine: str = "spec", seed: int = 0, lm=None, tok=None
                              f"no external assets) for: {prompt}\nReturn only the HTML."}])
         html = re.sub(r"^```\w*\n|```$", "", msg.strip())
         return {"engine": "remote", "html": html, "spec": None}
+    if engine == "pretrained" and lm is not None:
+        return {"engine": "pretrained", "html": lm.html_page(prompt), "spec": None}
+    gui = parse_gui(prompt, seed)
+    if gui is not None:
+        from xon.datasets.synth_ui import spec_to_html_v2
+        return {"engine": "spec-gui", "html": spec_to_html_v2(gui), "spec": gui}
     spec = parse(prompt, seed)
-    return {"engine": "spec", "html": spec_to_html(spec), "spec": spec}
+    return {"engine": "spec", "html": snap_grid(spec_to_html(spec)), "spec": spec}
+
+
+def snap_grid(html: str, step: int = 4) -> str:
+    """Snap padding/margin/gap px values in <style> to a 4px grid (design-system spacing)."""
+    def fix_decl(m):
+        vals = re.sub(r"(\d+)px", lambda v: f"{max(step, round(int(v.group(1)) / step) * step) if int(v.group(1)) else 0}px", m.group(2))
+        return m.group(1) + vals
+
+    def fix_style(m):
+        return re.sub(r"((?:padding|margin|gap)[a-z-]*:)([^;}]+)", fix_decl, m.group(0))
+    return re.sub(r"<style>.*?</style>", fix_style, html, flags=re.S)
 
 
 def render(result: dict, out_png=None, renderer=None):

@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 MODULES = ["read", "write", "edit", "glob", "grep", "shell", "test", "git", "web_fetch", "view_image", "recognize",
-           "complete", "design", "fix"]
+           "complete", "design", "fix", "python_run", "cpp_build", "lint", "sqlite", "serve", "patch", "think", "docs_search", "codegen"]
 
 
 @dataclass
@@ -30,6 +30,16 @@ class Context:
             else:
                 self._models["vision"] = None
         return self._models["vision"]
+
+    def pretrained(self):
+        """Warm-start code model (Qwen2.5-Coder-0.5B-Instruct by default) or None."""
+        if "pretrained" not in self._models:
+            try:
+                from xon.lm.pretrained import load
+                self._models["pretrained"] = load(self.cfg)
+            except Exception:
+                self._models["pretrained"] = None
+        return self._models["pretrained"]
 
     def lm(self):
         if "lm" not in self._models:

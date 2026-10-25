@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
 <title>XON Dashboard</title>
+<link rel="icon" href="/favicon.svg" type="image/svg+xml">
 <style>
 :root{--bg:#f5f6f8;--card:#fff;--text:#16191d;--muted:#5d6672;--line:#e3e6ea;--accent:#2f5fd0;--accent2:#c2410c;--ok:#1f7a3f;--bad:#b42318}
 @media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#0f1216;--card:#171b21;--text:#e8ebef;--muted:#9aa4b1;--line:#2a3039;--accent:#7aa2ff;--accent2:#ff9a5c;--ok:#5fd18a;--bad:#ff6b5e}}
@@ -12,6 +13,9 @@
 body{margin:0;background:var(--bg);color:var(--text);font:14px/1.45 system-ui,-apple-system,Segoe UI,sans-serif}
 header{display:flex;align-items:center;gap:16px;padding:14px 24px;border-bottom:1px solid var(--line);background:var(--card);flex-wrap:wrap}
 header h1{margin:0;font-size:20px;letter-spacing:.5px}
+.mascot{display:flex;align-items:center;gap:10px}.mascot img{width:52px;height:52px}
+.bubble{position:relative;background:var(--bg);border:1px solid var(--line);border-radius:12px;padding:6px 10px;font-size:12px;color:var(--text);max-width:260px}
+.bubble:before{content:"";position:absolute;left:-7px;top:50%;margin-top:-6px;border:6px solid transparent;border-right-color:var(--line);border-left:0}
 header .sub{color:var(--muted)}
 .chips{display:flex;gap:8px;flex-wrap:wrap;margin-left:auto}
 .chip{border:1px solid var(--line);border-radius:999px;padding:3px 10px;font-size:12px;color:var(--muted)}
@@ -52,7 +56,8 @@ svg text{fill:var(--muted);font-size:10px}
 </head>
 <body>
 <header>
-  <h1>XON</h1><span class="sub">X-87 · X-Over-Node · tier <b id="tier">?</b> · phase <span class="phase" id="phase">-</span></span>
+  <div class="mascot"><img src="/biscuit.svg" alt="Biscuit, the XON cat"><h1>XON</h1></div><span class="sub">X-87 · X-Over-Node · tier <b id="tier">?</b> · phase <span class="phase" id="phase">-</span></span>
+  <div class="bubble" id="biscuit" aria-live="polite">Biscuit: hi!</div>
   <div class="chips" id="nodes"></div>
   <button id="stop" title="Writes the STOP file: every node halts within seconds">STOP</button>
 </header>
@@ -100,6 +105,10 @@ function line(svg, series){
 const COLS=[['code_ppl','ppl'],['code_pass@1','pass@1'],['bugfix_rate','fix'],['design_fidelity','fidelity'],['ui_f1','UI F1'],['recog_top1','top-1'],['recog_zero_shot','0-shot']];
 async function tick(){
   let d; try{ d = await (await fetch('/api/status')).json(); }catch(e){ return; }
+  const ph=(d.status&&d.status.phase)||'idle';
+  const say={idle:'napping. nothing to do. purr.',pull:'sniffing new shards...',synth:'drawing practice UIs!',label:'labeling pictures',
+    tokenizer:'learning words',train_lm:'studying Python + C++ code',train_vision:'staring at screenshots',evaluate:'taking the frozen exams. no peeking!'};
+  $('#biscuit').textContent='Biscuit: '+(d.governor.stopped?'STOP pressed. paws off.':(say[ph]||ph));
   $('#tier').textContent=d.tier; $('#phase').textContent=(d.status&&d.status.phase)||'idle';
   $('#nodes').innerHTML=(d.nodes||[]).map(n=>`<span class="chip"><span class="dot ${n.alive?'on':''}"></span><b>${n.node}</b> ${n.phase||''}</span>`).join('')||'<span class="chip">no nodes running</span>';
   const g=d.governor; const stop=$('#stop'); stop.textContent=g.stopped?'STOPPED':'STOP'; stop.classList.toggle('stopped',g.stopped);

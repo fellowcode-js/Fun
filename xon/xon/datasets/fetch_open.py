@@ -14,7 +14,7 @@ from xon.pipeline.store import EvalGuard, ShardWriter
 
 HERE = Path(__file__).parent
 API = "https://datasets-server.huggingface.co/rows"
-LANG = {"Python": "python", "JavaScript": "javascript", "TypeScript": "typescript", "HTML": "html", "CSS": "css"}
+LANG = {"Python": "python", "C++": "cpp", "C": "c", "JavaScript": "javascript", "TypeScript": "typescript", "HTML": "html", "CSS": "css"}
 
 
 def sources() -> dict:
@@ -54,7 +54,7 @@ def _rows(dataset: str, cfg: str, split: str, offset: int, length: int = 100, ti
     return [x["row"] for x in r.json().get("rows", [])]
 
 
-def fetch_github_code(w: ShardWriter, max_rows: int = 600, max_bytes: int = 4_000_000, gov=None, delay: float = 1.0,
+def fetch_github_code(w: ShardWriter, max_rows: int = 1500, max_bytes: int = 4_000_000, gov=None, delay: float = 1.0,
                       offset: int = 0) -> dict:
     s = sources()["github_code_clean"]
     allow = set(s["allow_row_licenses"])
@@ -111,7 +111,7 @@ def fetch_mbpp(w: ShardWriter, gov=None) -> dict:
 
 
 def run(cfg: dict | None = None, shard_dir: Path | None = None, online: bool = True, gov=None,
-        max_rows: int = 600) -> dict:
+        max_rows: int = 1500) -> dict:
     """First call: stdlib + MBPP + first slice of github-code. Later calls (refresh): next github-code slice only."""
     import json
     cfg = cfg or config.load()

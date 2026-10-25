@@ -43,7 +43,7 @@ def _str_mutations(line: str) -> list[str]:
     return out
 
 
-def mutants(code: str, focus: list[int] | None = None) -> list[str]:
+def mutants(code: str, focus: list[int] | None = None, lang: str = "python") -> list[str]:
     lines = code.split("\n")
     idxs = focus if focus else range(len(lines))
     seen, out = {code}, []
@@ -51,7 +51,7 @@ def mutants(code: str, focus: list[int] | None = None) -> list[str]:
         if i < 0 or i >= len(lines):
             continue
         line = lines[i]
-        if line.strip().startswith(("def ", "#", '"""', "class ")):
+        if line.strip().startswith(("def ", "#", '"""', "class ", "//", "#include")):
             continue
         cands = []
         for m in re.finditer(r"(?<![<>=!])(<=|>=|==|!=|<|>)(?![<>=])", line):
@@ -67,10 +67,11 @@ def mutants(code: str, focus: list[int] | None = None) -> list[str]:
             if new in seen:
                 continue
             seen.add(new)
-            try:
-                ast.parse(new)
-            except SyntaxError:
-                continue
+            if lang == "python":
+                try:
+                    ast.parse(new)
+                except SyntaxError:
+                    continue
             out.append(new)
     return out
 
@@ -84,18 +85,26 @@ def suspicious_lines(code: str, stderr: str) -> list[int]:
 
 
 def repair(code: str, run: Callable[[str], dict], scorer: Callable[[str], float] | None = None,
-           max_tries: int = 300) -> dict:
-    """run(code) -> {'ok': bool, 'stderr': str}. scorer(code) -> lower is better (e.g. LM loss)."""
+           max_tries: int = 300, lang: str = "python", rewriter: Callable[[str, str], list[str]] | None = None) -> dict:
+    """run(code) -> {'ok': bool, 'stderr': str}. scorer(code) -> lower is better (e.g. LM loss).
+    Stage 1: mutation search around suspicious lines. Stage 2 (if given): LLM rewrites from the failure output.
+    Every candidate is verified by `run`; nothing unverified is returned."""
     base = run(code)
     if base["ok"]:
         return {"ok": True, "patched": code, "tries": 0, "note": "tests already pass"}
-    cands = mutants(code, suspicious_lines(code, base.get("stderr", "")))
+    cands = mutants(code, suspicious_lines(code, base.get("stderr", "")), lang=lang)
     if scorer is not None:
         cands.sort(key=scorer)
+    n = 0
     for n, c in enumerate(cands[:max_tries], 1):
         if run(c)["ok"]:
-            return {"ok": True, "patched": c, "tries": n, "candidates": len(cands)}
-    return {"ok": False, "patched": None, "tries": min(len(cands), max_tries), "candidates": len(cands)}
+            return {"ok": True, "patched": c, "tries": n, "candidates": len(cands), "stage": "mutation"}
+    if rewriter is not None:
+        for c in rewriter(code, base.get("stderr", "") + base.get("stdout", "")):
+            n += 1
+            if c.strip() and run(c)["ok"]:
+                return {"ok": True, "patched": c, "tries": n, "candidates": len(cands), "stage": "llm-rewrite"}
+    return {"ok": False, "patched": None, "tries": n, "candidates": len(cands)}
 
 
 def unified_diff(a: str, b: str, name: str = "file.py") -> str:

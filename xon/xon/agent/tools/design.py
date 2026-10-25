@@ -7,7 +7,7 @@ SPEC = {"name": "design", "description": "design actions: from_prompt(prompt,out
 
 
 def run(ctx, action: str, prompt: str = "", path: str = "", out: str = "", base: str = "#2f5fd0", dark: bool = False,
-        ratio: float = 1.25, interact: bool = False, **_) -> dict:
+        ratio: float = 1.25, interact: bool = False, engine: str = "spec", **_) -> dict:
     from xon.design import critique, from_prompt, palette, tokens
     from xon.design.render import Renderer
     if action == "palette":
@@ -16,7 +16,10 @@ def run(ctx, action: str, prompt: str = "", path: str = "", out: str = "", base:
         return {"ok": True, **palette.type_scale(16, ratio)}
     if action == "from_prompt":
         try:
-            res = from_prompt.generate(prompt)
+            pt = ctx.pretrained() if engine == "pretrained" else None
+            if engine == "pretrained" and pt is None:
+                return {"ok": False, "error": "no pretrained coder available"}
+            res = from_prompt.generate(prompt, engine=engine, lm=pt)
         except from_prompt.Refused as e:
             return {"ok": False, "refused": True, "error": str(e)}
         outp = ctx.path(out or "index.html")

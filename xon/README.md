@@ -1,5 +1,9 @@
 # XON — X-87 "X-Over-Node"
 
+<img src="docs/biscuit.svg" alt="Biscuit, the brown and white XON cat" width="140" align="right">
+
+Mascot: **Biscuit**, a brown-and-white cat who naps while XON trains and narrates the dashboard.
+
 A self-building workstation for **coding and designing**. One command builds the workstation, pulls code, design
 material and image-text pairs from the web and open datasets (politely, with license checks), cleans and stores
 them, trains a small code LM and a vision net, evaluates them on frozen sets, promotes only real improvements, and

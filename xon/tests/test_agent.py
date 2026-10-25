@@ -150,3 +150,45 @@ def test_llm_backend_tool_loop_with_fake_openai_server(tmp_path, home, monkeypat
     assert r["backend"] == "openai" and r["summary"] == "Done: wrote hello.py"
     assert any(t["function"]["name"] == "write" for t in calls[0]["tools"])
     assert calls[1]["messages"][-1]["role"] == "tool"
+
+
+def test_new_sandbox_tools(tmp_path, home):
+    ctx = Context(tmp_path, home)
+    t = registry()
+    assert t["python_run"].run(ctx, "print(6*7)")["stdout"].strip() == "42"
+    r = t["cpp_build"].run(ctx, code="#include <cstdio>\nint main(){int x; std::printf(\"%d\\n\", 7); return 0;}")
+    assert r["ok"] and r["stdout"].strip() == "7" and any("unused" in w for w in r["warnings"])
+    bad = t["cpp_build"].run(ctx, code="int main(){int a[2]; return a[5];}", sanitize=True)
+    assert not bad["ok"]
+    (tmp_path / "m.py").write_text("import os, sys\ndef f(x=[]):\n    try:\n        return y\n    except:\n        pass\nprint(sys.argv)\n")
+    kinds = {i["kind"] for i in t["lint"].run(ctx, "m.py")["issues"]}
+    assert {"unused-import", "mutable-default", "undefined-name", "bare-except"} <= kinds
+    assert t["sqlite"].run(ctx, "d.db", "create table t(x int); insert into t values (1),(2);")["ok"]
+    assert t["sqlite"].run(ctx, "d.db", "select sum(x) from t")["rows"] == [(3,)]
+    t["think"].run(ctx, note="hypothesis: off-by-one")
+    assert "off-by-one" in t["think"].run(ctx, read=True)["notes"]
+    git_repo(tmp_path)
+    (tmp_path / "a.txt").write_text("one\n")
+    diff = "--- a/a.txt\n+++ b/a.txt\n@@ -1 +1 @@\n-one\n+two\n"
+    assert t["patch"].run(ctx, diff)["ok"] and (tmp_path / "a.txt").read_text() == "two\n"
+
+
+def test_run_tools_need_approval_in_ask_mode():
+    with pytest.raises(PermissionDenied):
+        Permissions("ask", interactive=False).check("python_run", {"code": "print(1)"})
+    Permissions("auto-edit", interactive=False).check("cpp_build", {"code": "int main(){}"})
+
+
+def test_rules_routes_coding_tasks():
+    r = RulesBackend()
+    assert r.classify("implement a binary search in C++") == "write_code"
+    assert r.classify("write a python function called slugify") == "write_code"
+    assert r.classify("build a todo app") == "build_app"
+
+
+def test_cpp_repair_on_blind_style_bug():
+    from xon.agent.sandbox import run_cpp_tests
+    from xon.lm.repair import repair
+    buggy = "int max2(int a, int b) {\n    return a < b ? a : b;\n}\n"
+    r = repair(buggy, lambda c: run_cpp_tests(c, ["max2(1, 2) == 2", "max2(5, 3) == 5"]), lang="cpp")
+    assert r["ok"] and r["stage"] == "mutation" and r["patched"] != buggy

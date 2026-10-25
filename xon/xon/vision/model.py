@@ -18,7 +18,7 @@ class VisionConfig:
     embed_dim: int = 128
     text_buckets: int = 4096
     n_classes: int = 10
-    n_ui: int = 7
+    n_ui: int = 13
     det_stride: int = 8
 
     def to_dict(self):

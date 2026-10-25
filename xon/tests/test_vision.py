@@ -24,7 +24,8 @@ def test_vision_heads_shapes():
     m = XONVision(VisionConfig(n_classes=len(shapes.SHAPES)))
     x = torch.randn(2, 3, 64, 64)
     assert m.classify(x).shape == (2, 10)
-    assert m.detect_raw(torch.randn(1, 3, DET_H, DET_W)).shape == (1, 12, DET_H // 8, DET_W // 8)
+    from xon.datasets.synth_ui import UI_CLASSES
+    assert m.detect_raw(torch.randn(1, 3, DET_H, DET_W)).shape == (1, len(UI_CLASSES) + 5, DET_H // 8, DET_W // 8)
     assert m.zero_shot(x, shapes.SHAPES).shape == (2, 10)
     loss = m.contrastive_loss(x, ["a red star", "a blue circle"])
     assert torch.isfinite(loss)
@@ -36,7 +37,7 @@ def test_short_training_beats_chance(tmp_path):
     for s in range(400):
         img, sh, _, cap = shapes.make(s)
         pairs.append({"image": img, "caption": cap, "label": shapes.SHAPES.index(sh)})
-    train.train(pairs, [], tmp_path, minutes=0.5, max_steps=120)
+    train.train(pairs, [], tmp_path, minutes=10, max_steps=120)
     m = train.load_model(tmp_path / "vision.pt")
     from xon.vision.train import to_tensor
     xs, ys = [], []

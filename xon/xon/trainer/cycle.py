@@ -72,7 +72,11 @@ class Cycle:
     def synth_batch(self, n_ui: int, n_shapes: int, cycle: int):
         out = self.data / "synth" / f"cycle-{cycle:03d}"
         start = 100_000 * cycle
-        rows = synth_ui.load_index(out) or synth_ui.generate(out, n_ui, start_seed=start, gov=self.gov)
+        rows = synth_ui.load_index(out)
+        if not rows:  # 40% v1 pages, 60% v2 app/settings/window/pricing GUIs
+            n1 = int(n_ui * 0.4)
+            rows = synth_ui.generate(out, n1, start_seed=start, gov=self.gov) + \
+                synth_ui.generate(out, n_ui - n1, start_seed=start + 50_000, gov=self.gov, version=2)
         ui = [{"kind": "ui", "description": r["description"], "html": r["html"], "image_path": str(out / r["image"]),
                "boxes": r["boxes"], "license": r["license"], "source": r["source"]} for r in rows]
         pairs = []
@@ -97,7 +101,8 @@ class Cycle:
         lmcfg_d["vocab_size"] = tok.vocab_size
         lmcfg = LMConfig.from_dict(lmcfg_d) if lmcfg_d.get("d_model") else LMConfig(vocab_size=tok.vocab_size, d_model=128, n_layers=4, n_heads=2, n_kv_heads=1, seq_len=256)
         lmcfg.vocab_size = tok.vocab_size
-        train_ids, val_ids = lmdata.tokenize(recs, tok, seed=cycle, repeat={"ui": 1, "instruct": 2})
+        train_ids, val_ids = lmdata.tokenize(recs, tok, seed=cycle, repeat={"ui": 1, "instruct": 2},
+                                             lang_repeat={"python": 2, "cpp": 2})
         minutes = self.cfg["lm"]["minutes"] if not self.quick else 0.5
         batch = 16
         steps = int(self.plan.get("tokens", 20 * lmcfg.n_params()) / (batch * lmcfg.seq_len) / max(1, self.cfg.get("cycles", 1)))
@@ -151,6 +156,23 @@ class Cycle:
                 n += 1
         return n
 
+    def practice_round(self, recs) -> list[dict]:
+        """Verified solutions from the warm-start coder (rejection sampling); cached across cycles."""
+        f = self.data / "practice.jsonl"
+        try:
+            from xon.lm.pretrained import load
+            coder = load(self.cfg) if not self.quick else None
+        except Exception:
+            coder = None
+        if coder is not None:
+            from xon.trainer import practice
+            tasks = [r for r in recs if r.get("kind") == "instruct" and "xon-practice" not in (r.get("source") or "")]
+            stats = practice.run(coder, tasks, f, self.evalsets, limit=self.cfg.get("practice", {}).get("limit", 60), log=log)
+            log.info(f"practice round: {stats}")
+        if not f.exists():
+            return []
+        return [json.loads(l) for l in f.read_text().splitlines() if l.strip()]
+
     # ---------- 4. evaluate
     def evaluate(self, lm_path: Path, vision_path: Path, tok) -> dict:
         from xon.design import eval as deval
@@ -165,11 +187,14 @@ class Cycle:
         pk = leval.code_pass_k(m, tok, self.evalsets, n_samples=5 if not self.quick else 2, limit=None if not self.quick else 10)
         bf = leval.bugfix(m, tok, self.evalsets)
         bfb = leval.bugfix(m, tok, self.evalsets, fname="bugfix_blind.jsonl")
+        cpp = leval.cpp_pass_k(m, tok, self.evalsets, n_samples=5 if not self.quick else 1, limit=None if not self.quick else 5) \
+            if (self.evalsets / "cpp_problems.jsonl").exists() else {"pass@1": 0.0, "pass@5": 0.0}
         vm = vtrain.load_model(vision_path)
         rec = veval.recognition(vm, self.evalsets)
         cache = self.data / "eval_cache" / "ui_heldout"
         with Renderer() as r:
             ui = veval.ui_detection(vm, self.evalsets, cache, renderer=r)
+            ui2 = veval.ui_detection(vm, self.evalsets, cache, renderer=r, version=2) if (self.evalsets / "ui_heldout_v2.jsonl").exists() else {"f1@0.5": 0.0}
             fid = deval.fidelity_eval(vm, self.evalsets, cache, r, limit=12 if not self.quick else 3, steps=8 if not self.quick else 3)
             crit = deval.critique_sanity(r)
         con = deval.contrast_accuracy(self.evalsets)
@@ -177,11 +202,11 @@ class Cycle:
                     "code_pass@5": pk["pass@5"], "bugfix_rate": bf["repair_rate"], "bugfix_lm_only": bf["lm_only_rate"],
                     "bugfix_blind_rate": bfb["repair_rate"], "bugfix_blind_lm_only": bfb["lm_only_rate"],
                     "recog_top1": rec["top1"], "recog_top5": rec["top5"], "recog_zero_shot": rec["zero_shot_top1"],
-                    "ui_f1": ui["f1@0.5"], "ui_precision": ui["precision"], "ui_recall": ui["recall"],
+                    "ui_f1": ui["f1@0.5"], "ui_f1_v2": ui2["f1@0.5"], "cpp_pass@1": cpp["pass@1"], "cpp_pass@5": cpp["pass@5"], "ui_precision": ui["precision"], "ui_recall": ui["recall"],
                     "design_fidelity": fid["fidelity_final"], "design_fidelity_baseline": fid["fidelity_bg_only_baseline"],
                     "design_fidelity_initial": fid["fidelity_initial"], "contrast_accuracy": con["accuracy"],
                     "critique_recall": crit["recall"], "critique_generated_score": crit["generated_page_score"]})
-        res["_detail"] = {"ppl": ppl, "pass_k": pk, "bugfix": bf, "bugfix_blind": bfb, "recognition": rec, "ui": ui,
+        res["_detail"] = {"ppl": ppl, "pass_k": pk, "bugfix": bf, "bugfix_blind": bfb, "recognition": rec, "ui": ui, "ui_v2": ui2, "cpp_pass_k": cpp,
                           "fidelity": fid, "contrast": con, "critique": crit}
         return res
 
@@ -197,7 +222,9 @@ class Cycle:
         image_recs = [r for r in recs if r.get("kind") == "image"]
         status_write(self.cfg, phase="label")
         n_pseudo = self.pseudo_label(image_recs)
-        text_recs = [r for r in recs if r.get("kind") in ("code", "text", "instruct")] + [
+        status_write(self.cfg, phase="practice")
+        practice = self.practice_round(recs + self.replay.items)
+        text_recs = [r for r in recs if r.get("kind") in ("code", "text", "instruct")] + practice + [
             {k: v for k, v in u.items() if k in ("kind", "description", "html", "license", "source")} for u in ui]
         replay = self.replay.sample(len(self.replay.items))  # full replay buffer mixed with new data
         status_write(self.cfg, phase="tokenizer")

@@ -84,3 +84,49 @@ def run_python(source: str, timeout: float = 10, mem_mb: int = 1024) -> dict:
 def run_tests_on(code: str, tests: list[str], timeout: float = 10) -> dict:
     prog = code + "\n\n" + "\n".join(f"assert {t}, {t!r}" for t in tests) + "\n"
     return run_python(prog, timeout=timeout)
+
+
+def compiler() -> str | None:
+    import shutil
+    for c in (os.environ.get("XON_CXX", ""), "g++", "clang++"):
+        if c and shutil.which(c):
+            return c
+    return None
+
+
+def run_cpp(source: str, timeout: float = 10, std: str = "c++17", mem_mb: int = 1024, extra_flags: tuple = ()) -> dict:
+    """Compile and run untrusted C++ in a temp dir. Returns compile errors separately from runtime failures."""
+    cxx = compiler()
+    if cxx is None:
+        return {"ok": False, "stage": "compile", "code": 127, "stderr": "no C++ compiler (install g++ or clang++)"}
+    with tempfile.TemporaryDirectory() as d:
+        src, exe = Path(d) / "prog.cpp", Path(d) / "prog"
+        src.write_text(source)
+        try:
+            c = subprocess.run([cxx, f"-std={std}", "-O1", "-Wall", "-Wextra", *extra_flags, str(src), "-o", str(exe)],
+                               cwd=d, capture_output=True, text=True, timeout=60, env={"PATH": os.environ.get("PATH", "")})
+        except subprocess.TimeoutExpired:
+            return {"ok": False, "stage": "compile", "code": 124, "stderr": "compile timeout"}
+        if c.returncode != 0:
+            return {"ok": False, "stage": "compile", "code": c.returncode, "stderr": c.stderr[-4000:]}
+        try:
+            p = subprocess.run([str(exe)], cwd=d, capture_output=True, text=True, timeout=timeout,
+                               env={"PATH": os.environ.get("PATH", "")},
+                               preexec_fn=_limits(mem_mb) if os.name == "posix" else None)
+            return {"ok": p.returncode == 0, "stage": "run", "code": p.returncode, "stdout": p.stdout[-2000:],
+                    "stderr": (p.stderr[-3000:] + ("\n" + c.stderr[-1000:] if c.stderr else "")).strip()}
+        except subprocess.TimeoutExpired:
+            return {"ok": False, "stage": "run", "code": 124, "stderr": "timeout"}
+
+
+def run_cpp_tests(code: str, tests: list[str], timeout: float = 10) -> dict:
+    """tests are C++ boolean expressions; each failing one prints its text and exits 1."""
+    checks = "\n".join(f'    if (!({t})) {{ std::cerr << "FAILED: " << {json_str(t)} << "\\n"; return 1; }}' for t in tests)
+    prog = ("#include <bits/stdc++.h>\nusing namespace std;\n" + code +
+            "\nint main() {\n" + checks + "\n    return 0;\n}\n")
+    return run_cpp(prog, timeout=timeout)
+
+
+def json_str(s: str) -> str:
+    import json
+    return json.dumps(s)

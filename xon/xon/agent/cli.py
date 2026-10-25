@@ -220,7 +220,8 @@ def cmd_repl(a):
     cfg = _cfg()
     root = Path.cwd().resolve()
     st = {"root": root, "cfg": cfg, "agent": Agent(root, cfg, mode=a.mode), "workspace": "."}
-    print("XON agent. /help for commands, /quit to exit.")
+    print(BISCUIT)
+    print("XON agent with Biscuit. /help for commands, /quit to exit.")
     while True:
         try:
             line = input("xon> ")
@@ -228,6 +229,14 @@ def cmd_repl(a):
             break
         if not dispatch(st, line):
             break
+
+
+BISCUIT = r"""
+   /\_/\     Biscuit (XON's cat)
+  ( o.o )    brown & white, mostly napping,
+   > ^ <     occasionally fixing your tests
+  /|_X_|\
+"""
 
 
 def main(argv=None):

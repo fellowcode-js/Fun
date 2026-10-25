@@ -54,7 +54,10 @@ def run(ctx, tests: str = "tests", max_files: int = 3, max_tries: int = 400) -> 
         cands = repair.mutants(orig, by_file[f][:12])
         if scorer:
             cands.sort(key=scorer)
-        for c in cands[:max_tries]:
+        pt = ctx.pretrained()
+        if pt is not None and f.endswith(".py"):
+            cands = cands[:max_tries] + _llm_candidates(pt, orig, by_file[f][0], r["stdout"][-2000:])
+        for c in cands[:max_tries + 4]:
             tried += 1
             if check(c)["ok"]:
                 p.write_text(c)
@@ -67,3 +70,29 @@ def run(ctx, tests: str = "tests", max_files: int = 3, max_tries: int = 400) -> 
         p.write_text(orig)
     return {"ok": False, "error": "no candidate patch passed", "tries": tried, "failing": failing,
             "suspicious": [(a, b, round(s, 3)) for a, b, s in ranked[:5]]}
+
+
+def _llm_candidates(pt, src: str, line0: int, failure: str, n: int = 4) -> list[str]:
+    """Rewrite only the function enclosing the most suspicious line; splice each proposal back into the file."""
+    import ast
+    try:
+        tree = ast.parse(src)
+    except SyntaxError:
+        return []
+    fn = None
+    for node in ast.walk(tree):
+        if isinstance(node, (ast.FunctionDef, ast.AsyncFunctionDef)) and node.lineno - 1 <= line0 <= (node.end_lineno or node.lineno) - 1:
+            if fn is None or node.lineno > fn.lineno:
+                fn = node
+    if fn is None:
+        return []
+    lines = src.split("\n")
+    a, b = fn.lineno - 1, fn.end_lineno
+    func = "\n".join(lines[a:b])
+    out = []
+    for prop in pt.rewrite(func, failure, n=n):
+        prop = prop.rstrip("\n")
+        if f"def {fn.name}(" not in prop:
+            continue
+        out.append("\n".join(lines[:a] + prop.split("\n") + lines[b:]))
+    return out

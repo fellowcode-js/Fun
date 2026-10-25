@@ -33,7 +33,8 @@ live = true
 
 [lm]
 config = "tiny"
-init = "scratch"
+init = "pretrained"
+pretrained = "Qwen/Qwen2.5-Coder-0.5B-Instruct"
 minutes = 9.52
 
 [vision]

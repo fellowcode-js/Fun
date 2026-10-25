@@ -5,6 +5,10 @@ seeds:
   - {url: "https://docs.python.org/3/library/functions.html", category: code, priority: 0}
   - {url: "https://raw.githubusercontent.com/psf/requests/main/src/requests/structures.py", category: code, priority: 0}
   - {url: "https://raw.githubusercontent.com/pallets/click/main/src/click/utils.py", category: code, priority: 0}
+  - {url: "https://docs.python.org/3/library/itertools.html", category: code, priority: 0}
+  - {url: "https://docs.python.org/3/library/collections.html", category: code, priority: 0}
+  - {url: "https://raw.githubusercontent.com/nlohmann/json/develop/include/nlohmann/detail/string_escape.hpp", category: code, priority: 0}
+  - {url: "https://raw.githubusercontent.com/fmtlib/fmt/master/include/fmt/args.h", category: code, priority: 0}
   - {url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Layout_cookbook", category: design, priority: 1}
   - {url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/button", category: design, priority: 1}
   - {url: "https://www.w3.org/WAI/WCAG21/Understanding/contrast-minimum.html", category: design, priority: 1}

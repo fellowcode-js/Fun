@@ -12,7 +12,8 @@ sources:
     split: train
     license: per-row
     allow_row_licenses: [mit, apache-2.0, bsd-3-clause, bsd-2-clause, isc, cc0-1.0, unlicense]
-    languages: [Python, JavaScript, TypeScript, HTML, CSS]
+    languages: [Python, C++, C, JavaScript, TypeScript, HTML, CSS]
+    weights: {Python: 3, C++: 3, C: 1, HTML: 2, CSS: 2, JavaScript: 1, TypeScript: 1}
     url: "https://huggingface.co/datasets/codeparrot/github-code-clean"
   mbpp:
     kind: hf_rows

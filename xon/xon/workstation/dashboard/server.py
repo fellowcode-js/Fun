@@ -84,6 +84,8 @@ def make_handler(cfg: dict):
         def do_GET(self):
             if self.path in ("/", "/index.html"):
                 return self._send(200, "text/html; charset=utf-8", (HERE / "index.html").read_bytes())
+            if self.path in ("/biscuit.svg", "/favicon.svg"):
+                return self._send(200, "image/svg+xml", (HERE / "biscuit.svg").read_bytes())
             if self.path.startswith("/api/status"):
                 return self._send(200, "application/json", json.dumps(gather(cfg), default=str).encode())
             if self.path.startswith("/img?p="):

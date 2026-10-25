@@ -68,3 +68,10 @@ def solve(model, tok: BPETokenizer, prompt_code: str, max_new: int = 160, temper
             break
         lines.append(line)
     return prompt_code + "\n".join(lines).rstrip() + "\n"
+
+
+def solve_cpp(model, tok: BPETokenizer, prompt_code: str, max_new: int = 160, temperature: float = 0.8, seed=None) -> str:
+    """Complete a C++ function body; stop at the closing brace in column 0."""
+    body = complete(model, tok, f"<|file|>solution.cpp\n#include <bits/stdc++.h>\nusing namespace std;\n\n{prompt_code}",
+                    max_new, temperature, seed=seed, stop_strings=("\n}",))
+    return prompt_code + body.rstrip() + "\n}\n"

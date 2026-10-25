@@ -20,7 +20,7 @@ HERE = Path(__file__).parent
 TEXT_TYPES = ("text/html", "text/plain", "text/css", "text/x-python", "application/javascript",
               "text/javascript", "image/svg+xml", "application/xhtml+xml")
 IMAGE_TYPES = ("image/png", "image/jpeg", "image/gif", "image/webp")
-SOURCE_EXT = {".py": "python", ".js": "javascript", ".ts": "typescript", ".css": "css", ".html": "html",
+SOURCE_EXT = {".py": "python", ".cpp": "cpp", ".cc": "cpp", ".hpp": "cpp", ".h": "cpp", ".js": "javascript", ".ts": "typescript", ".css": "css", ".html": "html",
               ".svg": "svg", ".md": "markdown"}
 
 

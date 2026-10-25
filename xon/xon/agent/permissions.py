@@ -3,8 +3,10 @@ from __future__ import annotations
 
 import sys
 
-READ_ONLY = {"read", "glob", "grep", "view_image", "recognize", "complete", "test", "git_status", "git_diff", "design_read"}
-EDITS = {"write", "edit"}
+READ_ONLY = {"read", "glob", "grep", "view_image", "recognize", "complete", "test", "git_status", "git_diff", "design_read",
+             "lint", "think", "docs_search"}
+RUN = {"python_run", "cpp_build", "serve"}  # execute code in the temp-dir sandbox: ask in 'ask' mode
+EDITS = {"write", "edit", "patch", "codegen"}
 PROTECTED = ("evalsets/", "xon/workstation/governor.py", "xon/pipeline/clean_text.py", "xon/pipeline/clean_images.py",
              "xon/design/brand.py", "xon/agent/sandbox.py", "xon/agent/permissions.py")
 
@@ -41,7 +43,7 @@ class Permissions:
                                        "re-run with --allow-protected after review")
         if tool in READ_ONLY:
             return
-        if tool in EDITS and self.mode in ("auto-edit", "full-auto"):
+        if (tool in EDITS or tool in RUN) and self.mode in ("auto-edit", "full-auto"):
             return
         if self.mode == "full-auto":
             return
