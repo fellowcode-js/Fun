@@ -40,6 +40,7 @@ minutes = 9.52
 [vision]
 config = "tiny"
 minutes = 4.5
+ui_samples = 300
 
 [agent]
 backend = "auto"
@@ -81,3 +82,6 @@ tie_embeddings = true
 grad_checkpoint = false
 n_image_tokens = 0
 image_dim = 0
+
+[practice]
+limit = 10

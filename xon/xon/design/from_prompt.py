@@ -28,7 +28,7 @@ def parse(prompt: str, seed: int = 0) -> dict:
     rng = random.Random(seed)
     m = re.search(r"#[0-9a-f]{6}\b", p)
     base = m.group(0) if m else next((v for k, v in COLOR_WORDS.items() if re.search(rf"\b{k}\b", p)), "#2f5fd0")
-    dark = bool(re.search(r"\bdark\b|\bnight\b", p))
+    dark = bool(re.search(r"\bdark\b(?! mode| theme toggle)|\bnight\b(?! mode)", p))
     pal = palette.generate(base, dark=dark)["tokens"]
     spec_pal = {"bg": pal["bg"], "surface": pal["surface"], "primary": pal["primary"], "accent": pal["accent"],
                 "text": pal["text"], "muted": pal["muted"], "dark": dark}
@@ -96,7 +96,7 @@ def parse_gui(prompt: str, seed: int = 0) -> dict | None:
         out = []
         for w in re.split(r",| and ", rx.group(1)) if rx else []:
             w = w.strip()
-            if re.match(r"(an?|the|with)\b", w):
+            if re.match(r"(an?|the|with)\b", w) or re.search(r"\b(sliders?|toggles?|tabs?|dropdowns?|checkbox(es)?|buttons?|tables?|forms?|toolbar)\b", w):
                 break
             if w:
                 out.append(w.capitalize())
@@ -107,12 +107,14 @@ def parse_gui(prompt: str, seed: int = 0) -> dict | None:
     toggles = words(re.search(r"toggles? (?:for )?([a-z ,-]+?)(?:\.|;|$| with)", p)) or (["Email alerts", "Dark mode"] if kind == "settings" else [])
     checks = words(re.search(r"checkbox(?:es)? (?:for )?([a-z ,-]+?)(?:\.|;|$| with)", p))
     sliders = words(re.search(r"sliders? (?:for )?([a-z ,]+?)(?:\.|;|$| with)", p)) or (["Volume"] if "slider" in p else [])
-    selects = [k for k in SELECTS if k.lower() in p] or (["Language", "Theme"] if kind == "settings" or "dropdown" in p else [])
+    selects = [k for k in SELECTS if re.search(rf"\b{k.lower()}\s+(dropdown|select|menu|picker)|(dropdown|select|menu) (for|of) {k.lower()}", p)] \
+        or (["Language", "Theme"] if kind == "settings" else ["Language"] if "dropdown" in p else [])
     stats_n = 4 if kind == "app" else 0
     return {"v": 2, "kind": kind, "palette": spal, "font": base["font"], "radius": base["radius"], "space": 16, "title": title,
             "sidebar": side, "tabs": tabs, "toggles": toggles[:4], "checks": checks[:4], "selects": selects[:3], "sliders": sliders[:2],
             "stats": [(n, v) for n, v in zip(["Users", "Revenue", "Orders", "Uptime"], ["1,284", "$9.4k", "312", "99.9%"])][:stats_n],
-            "table": kind == "app" or "table" in p, "buttons": ["Save", "Cancel"] if kind in ("settings", "window") else ["New report"],
+            "table": kind == "app" or "table" in p,
+            "buttons": ["Save", "Cancel"] if kind in ("settings", "window") else ["Contact sales"] if kind == "pricing" else ["New report"],
             "plans": [("Starter", "$9"), ("Pro", "$29"), ("Team", "$79")] if kind == "pricing" else [], "prompt": prompt}
 
 

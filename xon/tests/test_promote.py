@@ -52,3 +52,10 @@ def test_registry_carries_over_unpromoted_files(tmp_path):
     b.write_bytes(b"vis2")
     r.promote({"vision.pt": b}, BEST, 2)
     assert (r.promoted / "lm.pt").read_bytes() == b"lm1" and (r.promoted / "vision.pt").read_bytes() == b"vis2"
+
+
+def test_tiny_rate_changes_are_noise_not_regressions():
+    best = {**BEST, "code_pass@1": 0.0032}
+    c = {**best, "code_pass@1": 0.0, "code_ppl": 18.0}
+    d = decide(c, best)
+    assert d["promote"], d

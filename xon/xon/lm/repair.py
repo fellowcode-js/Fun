@@ -76,6 +76,23 @@ def mutants(code: str, focus: list[int] | None = None, lang: str = "python") -> 
     return out
 
 
+def specializes(orig: str, cand: str) -> int:
+    """1 if the candidate turns an inequality into ==/!= (patches like `total == 50` that fit the tests but
+    overfit them); such candidates are tried after boundary shifts like `>=` or `> 49`."""
+    import difflib
+    for a, b in zip(orig.splitlines(), cand.splitlines()):
+        if a != b:
+            ineq = re.search(r"[<>]=?", a) and not re.search(r"[<>]=?", b)
+            return 1 if ineq and re.search(r"[=!]=", b) else 0
+    _ = difflib
+    return 0
+
+
+def rank(orig: str, cands: list[str], scorer=None) -> list[str]:
+    """Order: non-specializing first; LM score (if any) breaks ties inside each group."""
+    return sorted(cands, key=lambda c: (specializes(orig, c), scorer(c) if scorer else 0))
+
+
 def suspicious_lines(code: str, stderr: str) -> list[int]:
     """Lines named in the traceback first, then the body of the function under test."""
     lines = code.split("\n")
@@ -92,9 +109,7 @@ def repair(code: str, run: Callable[[str], dict], scorer: Callable[[str], float]
     base = run(code)
     if base["ok"]:
         return {"ok": True, "patched": code, "tries": 0, "note": "tests already pass"}
-    cands = mutants(code, suspicious_lines(code, base.get("stderr", "")), lang=lang)
-    if scorer is not None:
-        cands.sort(key=scorer)
+    cands = rank(code, mutants(code, suspicious_lines(code, base.get("stderr", "")), lang=lang), scorer)
     n = 0
     for n, c in enumerate(cands[:max_tries], 1):
         if run(c)["ok"]:

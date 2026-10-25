@@ -211,7 +211,8 @@ class Cycle:
         return res
 
     # ---------- the cycle
-    def run(self, n_ui: int = 300, n_shapes: int = 3000) -> dict:
+    def run(self, n_ui: int | None = None, n_shapes: int = 3000) -> dict:
+        n_ui = n_ui or self.cfg["vision"].get("ui_samples", 300)
         self.gov.tick()
         c = self.state["cycle"] + 1
         t0 = time.time()
@@ -257,7 +258,12 @@ class Cycle:
         self.replay.add([r for r in text_recs if r.get("kind") != "ui"][:2000] + [
             {k: v for k, v in u.items() if k in ("kind", "description", "html", "license", "source")} for u in ui[:200]])
         self.replay.save()
-        rec = {"cycle": c, "promoted": d["promote"], "reason": d["reason"], "metrics": metrics,
+        planned = steps_planned = self.plan.get("tokens", 0) / max(1, self.cfg.get("cycles", 1))
+        starved = bool(planned) and lm.get("tokens_seen", 0) < 0.25 * min(planned, 3 * lm.get("train_tokens", planned))
+        if starved:
+            log.warning(f"cycle {c}: LM saw {lm.get('tokens_seen')} tokens, far below plan; the machine was likely busy (CPU contention)")
+        _ = steps_planned
+        rec = {"cycle": c, "promoted": d["promote"], "reason": d["reason"], "metrics": metrics, "starved": starved,
                "components": {k: v["promote"] for k, v in dc.items()},
                "lm": {k: v for k, v in lm.items() if k != "events"}, "lm_events": lm["events"],
                "vision": {k: v for k, v in vis.items() if k != "events"}, "vision_events": vis["events"],

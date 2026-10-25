@@ -6,3 +6,6 @@ pillow==11.0.0
 requests==2.32.3
 playwright==1.48.0
 pytest==8.3.3
+# warm-start coder (Qwen2.5-Coder-0.5B-Instruct, Apache-2.0); remove both lines and set [lm] init = "scratch" to skip
+transformers==4.46.3
+safetensors==0.4.5

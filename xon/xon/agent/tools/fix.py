@@ -51,9 +51,7 @@ def run(ctx, tests: str = "tests", max_files: int = 3, max_tries: int = 400) -> 
             rr = _pytest(ctx, f"-x {fail_sel}", {"PYTHONPATH": str(ctx.root)}, timeout=300)
             return {"ok": rr["code"] == 0, "stderr": rr["stdout"][-2000:]}
 
-        cands = repair.mutants(orig, by_file[f][:12])
-        if scorer:
-            cands.sort(key=scorer)
+        cands = repair.rank(orig, repair.mutants(orig, by_file[f][:12]), scorer)
         pt = ctx.pretrained()
         if pt is not None and f.endswith(".py"):
             cands = cands[:max_tries] + _llm_candidates(pt, orig, by_file[f][0], r["stdout"][-2000:])

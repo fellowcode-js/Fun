@@ -53,6 +53,7 @@ DEFAULTS: dict = {
     "transport": {"kind": "folder", "url": ""},
     "promote": {"noise_margin": 0.002, "max_regression": 0.02},
     "distill": {"enabled": False},
+    "practice": {"limit": 10},  # verified practice solutions per cycle (rejection sampling); 0 disables
 }
 
 

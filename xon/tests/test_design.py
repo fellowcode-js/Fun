@@ -117,3 +117,8 @@ def test_codegen_harvests_task_examples():
     from xon.agent.tools.codegen import examples_from_task
     assert examples_from_task("slugify, e.g. 'Hello World!' -> 'hello-world'", "slugify") == ["assert slugify('Hello World!') == 'hello-world'"]
     assert examples_from_task("so add(2, 3) == 5", None) == ["assert add(2, 3) == 5"]
+
+
+def test_dark_mode_toggle_does_not_make_page_dark():
+    assert not from_prompt.parse("settings with toggles for email alerts and dark mode")["palette"]["dark"]
+    assert from_prompt.parse("a dark analytics dashboard")["palette"]["dark"]

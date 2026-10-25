@@ -43,7 +43,10 @@ def decide(cand: dict, best: dict | None, noise_margin: float = 0.002, max_regre
     if not best:
         return {"promote": True, "reason": "no promoted checkpoint yet"}
     deltas = {m: rel_change(cand[m], best[m], d) for m, d in METRICS.items() if m in cand and m in best}
-    regress = {m: round(v, 4) for m, v in deltas.items() if v < -max_regression}
+    # rates in [0, 1] also need an absolute noise floor: 0.003 -> 0.0 (one sample of 310) is not a 100% regression
+    ABS_FLOOR = 0.01
+    regress = {m: round(v, 4) for m, v in deltas.items() if v < -max_regression
+               and not (m != "code_ppl" and abs(cand[m] - best[m]) < ABS_FLOOR)}
     if regress:
         return {"promote": False, "reason": f"regression beyond {max_regression:.0%}: {regress}", "deltas": deltas}
     gains = {m: round(deltas[m], 4) for m in primary if m in deltas and deltas[m] > noise_margin}

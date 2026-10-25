@@ -28,6 +28,15 @@ def run(check_network: bool = True) -> int:
             fix = (f"pip install {pipname}" if mod != "torch"
                    else "pip install torch --index-url https://download.pytorch.org/whl/cpu  (or the CUDA wheel)")
             add(FAIL, mod, "missing", fix)
+    try:
+        import transformers  # noqa: F401
+        from xon import config as _c
+        cache = _c.path(_c.load(), "checkpoints") / "pretrained"
+        have = any(cache.glob("models--*/snapshots/*/model.safetensors")) if cache.exists() else False
+        add(OK if have else WARN, "warm-start coder", "Qwen2.5-Coder-0.5B-Instruct cached" if have else "not downloaded yet",
+            "" if have else "downloads ~1 GB on first use (or set [lm] init = \"scratch\" in xon.toml)")
+    except ImportError:
+        add(WARN, "warm-start coder", "transformers missing", "pip install transformers safetensors  (else XON uses only its own small LM)")
     g = probe.gpu_info()
     if g.get("cuda"):
         add(OK, "gpu", f"CUDA {g['name']} x{g['count']} {g['vram_gb']:.1f} GB")

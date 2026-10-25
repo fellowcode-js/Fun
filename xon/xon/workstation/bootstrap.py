@@ -29,6 +29,7 @@ def init(root: Path, budget_str: str | None = None, gpu_price: float = 0.0, tier
     lm_min = max(1.0, plan["train_seconds"] / 60)
     cfg["lm"]["minutes"] = round(min(lm_min, hours * 60 * 0.35), 2)
     cfg["vision"]["minutes"] = round(max(1.0, hours * 60 * 0.15), 2)
+    cfg.setdefault("practice", {})["limit"] = 10 if t == "A" else 200
     cfg["plan"] = {"tokens": plan["tokens"], "params": plan["params"], "lm": plan["lm"]}
     gpu_hours = hours if p["gpu"].get("cuda") else 0.0
     cfg["governor"]["max_gpu_hours"] = round(gpu_hours * 1.1, 2)

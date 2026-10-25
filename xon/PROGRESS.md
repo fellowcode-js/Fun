@@ -57,6 +57,23 @@ Re-read this first when resuming. Newest entries at the bottom of each section.
 - Clean-folder unzip -> setup.sh -> init -> start --all: 19.6 min, works.
 - Full suite 57/57 (incl. slow). Vault lint of docs: 0 orphans.
 
+## v0.2 (user asked: smarter, more Python + C++, better UI/GUI design, better thinking, more tools, a cat mascot)
+- Warm start: Qwen2.5-Coder-0.5B-Instruct (Apache-2.0) as the local coder. Python pass@1 0.784 / pass@5 0.887,
+  C++ pass@1 0.75 / pass@5 0.857 on XON's frozen sets (from 0 with the from-scratch LM).
+- C++: frozen 28-problem eval (g++ compiled hidden tests), blind 8-bug C++ set, sandbox C++ runner, C++ repair.
+- Repair: mutation search then LLM rewrite (reason first, 4 samples, verified). Python blind 11/15 -> 13/15; C++ 8/8.
+- Data: C++/C in the HF code pull (permissive rows only), nlohmann/json + fmt seeds; cppreference skipped (Cloudflare
+  challenge, robots 403 = disallowed). Python/C++ up-weighted 2x. Practice round: 22/60 verified solutions kept.
+- GUI: synthetic v2 (app/sidebar, settings, desktop windows, pricing) with 6 new detector classes; GUI prompts in
+  from_prompt; critique found my own contrast/target/spacing bugs in the GUI CSS, fixed (all 5 sample prompts 100).
+- Thinking: write_code loop (generate, test, note, retry with sampling; tests frozen after attempt 1; task examples
+  become asserts; no-assert tests refused), best-of-two design + critique rounds, LLM routing for unknown tasks.
+  Fixed a false positive found in testing: the model had rewritten its own tests to pass.
+- Tools: python_run, cpp_build (+ASan/UBSan), lint, sqlite, serve, patch, think, docs_search, codegen (23 total).
+- Mascot: Biscuit, a brown-and-white cat (dashboard header + speech bubble, favicon, README, REPL banner).
+- Cycle 4: LM promoted (ppl 15.9 -> 13.9); vision rolled back (new head undertrained: v2 F1 0.17). Cycle 5 = vision
+  focused (900 GUI pages, 20 min).
+
 ## Next (if continued)
 - Tier B on a real GPU (docs/cloud.md); OCR for from_screenshot text; better icon detection.
 

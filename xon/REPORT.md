@@ -25,6 +25,40 @@ model was trained.
   robots.txt requests to docs.python.org at the 2-second per-domain spacing before I stopped it. Fixed, with a
   regression test (`test_robots_fetched_once_without_delay_override`).
 
+## v0.2: smarter coding (Python + C++), GUI design, thinking loops, more tools, Biscuit
+- **Warm start** (the original spec's `init = "pretrained"`): Qwen2.5-Coder-0.5B-Instruct, Apache-2.0, CPU inference
+  (about 12 tokens/s on 4 cores). On XON's frozen sets: Python pass@1 0.784 / pass@5 0.887 (55 of 62 solved by at
+  least one of 5 samples); C++ pass@1 0.750 / pass@5 0.857 (24 of 28). The from-scratch XON LM still scores ~0.
+  These problems are short and XON-written; overlap with the model's pretraining data cannot be ruled out.
+- **Repair** = mutation search, then LLM rewrites (brief reasoning first, 4 samples), every candidate verified by
+  tests. Blind Python set 11/15 -> 13/15 (2 fixed by the rewrite stage); blind C++ set 8/8. The rewrite prompt
+  was measured once on the blind set and not tuned further on it.
+- **C++ data:** C/C++ rows added to the Hugging Face code pull (permissive licenses only; 668 new files in one round),
+  nlohmann/json and fmt (MIT) seeds. cppreference.com was dropped: its robots.txt is behind a Cloudflare challenge
+  (HTTP 403), which XON treats as "disallowed" and does not try to bypass.
+- **Practice round** (rejection sampling): the warm-start coder solved MBPP training tasks; 22 of 60 solutions passed
+  their tests and were kept as training pairs. Nothing unverified is trained on.
+- **GUI design:** synthetic v2 generator (dashboards with sidebars, settings screens, desktop app windows, pricing)
+  and 6 new detector classes (checkbox, select, tabs, toggle, slider, sidebar). Cycle 5 (vision-focused: 900 pages,
+  20 min) reached UI-detection F1 0.692 on the frozen v2 GUI set and 0.640 on the v1 page set (was 0.555).
+  Per class on v2: select 0.81, slider 0.76, toggle 0.74, checkbox 0.54, tabs 0.51, sidebar 0.46, icon 0.00.
+  `from_prompt` builds these layouts from descriptions; all four sample GUI prompts score 100 in critique.
+- **Thinking loops:** `write_code` (generate code + tests, run, note, retry with sampling, then repair) and design
+  best-of-two (spec engine vs pretrained HTML) with critique rounds; unknown tasks routed by the local model.
+- **Tools:** 23 (new: python_run, cpp_build with ASan/UBSan, lint, sqlite, serve, patch, think, docs_search, codegen).
+
+### v0.2 incidents (found by testing, fixed)
+- **False success:** on a retry the model rewrote its own tests into a bare `import`, and the agent reported a wrong
+  `slugify` as passing. Fix: tests are frozen after attempt 1, examples in the task become authoritative asserts,
+  and test files without assertions are refused. After the fix the same task honestly ends `ok: false` (the 0.5B
+  model cannot write that regex in 3 sampled attempts); a C++ binary search passes on attempt 1.
+- **Overfitting patch:** the fix tool returned `total == 50` (passes the tests, wrong for 51). Candidates that turn an
+  inequality into `==`/`!=` are now tried after boundary shifts.
+- **Noisy gate:** cycle 5's LM was rolled back because code pass@1 moved 0.003 -> 0.000 (one sample of 310), read as a
+  100% regression. Rates now have an absolute noise floor of 0.01. Cycle 5's recorded decision was left as is.
+- **Starved training:** one M0 run trained at about 1,000 tokens/s instead of 22,000 because my own demo jobs were
+  competing for the 4 cores; its scores were invalid and it was rerun alone. Cycles now flag `starved`.
+
 ## Promotion gate, recovery and kill switch (observed, not just unit-tested)
 - **Cycle 2 was rolled back** by the gate: held-out perplexity regressed 72% (a fixed step budget on 34 new records
   overfit). Its vision net had improved but was discarded with it. Fix: LM and vision are now gated independently;
@@ -43,7 +77,7 @@ model was trained.
 
 ## Measured results
 <!-- AUTO:START -->
-_Generated 2026-10-25 06:36 UTC by `xon report` from logs, eval files and gate results._
+_Generated 2026-10-25 13:09 UTC by `xon report` from logs, eval files and gate results._
 
 ### Hardware (probed)
 
@@ -60,29 +94,44 @@ Budget plan: 0.5 h -> 0.79M params, 15.7M tokens (20.0 tok/param), measured 1499
 | A | 0.79M | 11.5M | 0.000 | 0.000 | 18.80 | 0.733 | 0.926 | 0.401 | 0.978 | 0.828 | 16.4 min |
 | A | 0.79M | 12.2M | 0.000 | 0.000 | 32.40 | 0.733 | 0.926 | 0.534 | 0.998 | 0.950 | 16.2 min |
 | A | 0.79M | 11.1M | 0.000 | 0.000 | 15.90 | 0.733 | 0.926 | 0.555 | 0.996 | 0.956 | 15.4 min |
+| A | 0.79M | 11.7M | 0.003 | 0.016 | 13.93 | 0.733 | 0.926 | 0.531 | 1.000 | 0.988 | 59.2 min |
+| A | 0.79M | 11.7M | 0.000 | 0.000 | 13.35 | 0.733 | 0.926 | 0.640 | 0.998 | 0.984 | 32.1 min |
 
 Tiers B and C were **not trained** (no GPU available). Their configs exist and are sized by the same code.
+
+### Warm-start coder: Qwen/Qwen2.5-Coder-0.5B-Instruct (Apache-2.0), CPU inference, frozen XON eval sets
+
+| eval | pass@1 | pass@5 | greedy solved | solved by any of 5 |
+|---|---|---|---|---|
+| Python (62 problems) | 0.784 | 0.887 | 50/62 | 55/62 |
+| C++ (28 problems) | 0.750 | 0.857 | 21/28 | 24/28 |
+
+Bug repair, blind sets, mutation search then LLM rewrite (every candidate verified by tests): Python 13/15 (by stage {'mutation': 11, 'llm-rewrite': 2}), C++ 8/8. LLM rewrite alone (4 samples): dev 0.500, blind 0.467.
+
+Caveat: these problems are short and XON-written; the pretrained model may have seen similar functions in its pretraining data, which cannot be ruled out.
 
 ### Latest cycle detail
 
 | metric | value | baseline / chance | note |
 |---|---|---|---|
 | code pass@1 / pass@5 (62 problems, 5 samples) | 0.000 / 0.000 | 0 | XON-written hidden tests |
-| held-out perplexity (stdlib + HTML) | 15.90 | BPE vocab 4096 | bits/char 1.304 |
+| held-out perplexity (stdlib + HTML) | 13.35 | BPE vocab 4096 | bits/char 1.221 |
 | bug-fix, dev set (20) | 1.000 | LM-only 0.000 | repair tool tuned on this set |
 | bug-fix, **blind** set (15) | 0.733 | LM-only 0.000 | never used for tuning |
 | screenshot->code fidelity (12 held-out) | 0.926 | bg-only 0.788, first layout 0.924 | SSIM+color+edge, 0..1 |
-| UI detection P / R / F1 @IoU0.5 | 0.543 / 0.568 / 0.555 | – | per class: {'button': 0.537, 'input': 0.719, 'nav': 0.944, 'card': 0.528, 'modal': 0.824, 'table': 0.538, 'icon': 0.122} |
-| recognition top-1 / top-5 / zero-shot | 0.996 / 1.000 / 0.956 | 0.100 | 10 procedural classes, 500 held-out |
+| UI detection F1, v2 GUIs (13 classes) | 0.692 | – | per class: {'button': 0.735, 'input': 1.0, 'nav': 0.48, 'card': 0.773, 'modal': 0.0, 'table': 0.667, 'icon': 0.0, 'checkbox': 0.538, 'select': 0.806, 'tabs': 0.514, 'toggle': 0.735, 'slider': 0.756, 'sidebar': 0.457} |
+| XON LM C++ pass@1 / pass@5 | 0.000 / 0.000 | 0 | from-scratch model |
+| UI detection P / R / F1 @IoU0.5 | 0.626 / 0.654 / 0.640 | – | per class: {'button': 0.78, 'input': 0.824, 'nav': 0.5, 'card': 0.647, 'modal': 0.824, 'table': 0.706, 'icon': 0.244, 'checkbox': 0.0, 'select': 0.0, 'tabs': 0.0, 'toggle': 0.0, 'slider': 0.0, 'sidebar': 0.0} |
+| recognition top-1 / top-5 / zero-shot | 0.998 / 1.000 / 0.984 | 0.100 | 10 procedural classes, 500 held-out |
 | contrast checker accuracy | 1.000 | – | 10 WCAG reference pairs |
-| critique: seeded-defect recall | 1.000 | – | generated page score 98 |
+| critique: seeded-defect recall | 1.000 | – | generated page score 100 |
 
 Example LM completion (first eval problem, greedy):
 
 ```python
 def add_two(a, b):
     """Return a + b."""
-    return a
+    return a(a, b)
 
 ```
 
@@ -93,23 +142,25 @@ def add_two(a, b):
 | 1 | yes | no promoted checkpoint yet | 927 | 18 | 0 | 2799 | 9.54 | 887 | time_budget |
 | 2 | no | regression beyond 2%: {'code_ppl': -0.723} | 34 | 18 | 0 | 2967 | 9.53 | 873 | init_from, time_budget |
 | 3 | yes | lm: PROMOTED (improved {'code_ppl': 0.1541}); vision: PROMOTED (improved {'ui_f1': 0.3854, | 225 | 0 | 0 | 2702 | 8.76 | 950 | init_from |
+| 4 | yes | lm: PROMOTED (improved {'code_ppl': 0.1242}); vision: rolled back (regression beyond 2%: { | 737 | 36 | 0 | 2866 | 9.53 | 797 | init_from, time_budget |
+| 5 | yes | lm: rolled back (regression beyond 2%: {'code_pass@1': -1.0, 'code_pass@5': -1.0}); vision | 0 | 0 | 0 | 2850 | 9.53 | 3000 | init_from, time_budget |
 
 ### Data
 
-- Crawl rounds: 2 live, 3 mock. Live pages fetched: 63; mock pages fetched: 120.
-- Stored records by kind: {'text': 49, 'code': 999, 'instruct': 119, 'image': 54}
-- Rejects / quarantine / PII scrubs: {'reject:code_too_short': 37, 'reject:minified': 1, 'pii_EMAIL': 7, 'pii_SECRET': 4, 'quarantine:unsafe_adult': 3, 'reject:near_dup': 8, 'pii_PHONE': 3, 'pii_ADDRESS': 3, 'reject:image_dup': 6}
-- Records by license: {'PSF-2.0': 476, 'BSD-3-Clause': 1, 'Apache-2.0': 1, 'CC-BY-SA': 70, 'W3C-doc': 30, 'ISC': 19, 'MIT': 409, 'CC-BY-4.0': 119, 'CC-BY': 96}
+- Crawl rounds: 3 live, 4 mock. Live pages fetched: 96; mock pages fetched: 160.
+- Stored records by kind: {'text': 57, 'code': 1675, 'instruct': 119, 'image': 72}
+- Rejects / quarantine / PII scrubs: {'reject:code_too_short': 37, 'reject:minified': 1, 'pii_EMAIL': 8, 'pii_SECRET': 5, 'quarantine:unsafe_adult': 4, 'reject:near_dup': 11, 'pii_PHONE': 4, 'pii_ADDRESS': 4, 'reject:image_dup': 8}
+- Records by license: {'PSF-2.0': 476, 'BSD-3-Clause': 1, 'Apache-2.0': 1, 'CC-BY-SA': 70, 'W3C-doc': 30, 'ISC': 19, 'MIT': 1079, 'CC-BY-4.0': 119, 'CC-BY': 128}
 
 ### Gates
 
 | gate | pass | key numbers |
 |---|---|---|
-| M0 | PASS | {'pass': True, 'minutes': 16.65, 'promoted': True, 'dashboard_ok': True, 'quick': False} |
+| M0 | PASS | {'pass': True, 'minutes': 19.88, 'promoted': True, 'dashboard_ok': True, 'quick': False} |
 | M1 | PASS | {'lm_loss_first': 7.636, 'lm_loss_last': 2.118, 'loss_drop': 0.723, 'recog_top1': 0.978, 'chance': 0.1, 'margin_over_chance': 0.878, 'ui_f1': 0.4006, 'synthetic_pairs': 300, 'synthetic_images_present': True, 'synthetic_with_labels': 1.0, 'synthetic_html_ok': True, 'pass': True} |
 | M2 | PASS | {'pass': True, 'device': 'cpu', 'params': 101569920, 'steps': 12, 'minutes': 0.95, 'val_loss': 6.758033752441406, 'first_loss': 8.485, 'note': 'hours-long Tier B run NOT executed (no GPU in this environment); this is the stability smoke check'} |
 | M3 | PASS | {'pass': True} |
-| M4 | PASS | {'pass': True, 'minutes': 0.53} |
+| M4 | PASS | {'pass': True, 'minutes': 2.84} |
 <!-- AUTO:END -->
 
 ## What the numbers mean

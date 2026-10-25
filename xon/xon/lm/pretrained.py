@@ -126,7 +126,7 @@ class PretrainedCoder:
         reply = self.chat([{"role": "system", "content": "You are a UI designer who writes clean, accessible HTML and CSS."},
                            {"role": "user", "content": "Write one complete self-contained HTML page (inline <style>, no external assets, "
                             f"no JavaScript frameworks, WCAG AA contrast, lang attribute, labelled inputs) for: {prompt}\n"
-                            "Return only the HTML in a ```html block."}], max_new=1500)
+                            "Return only the HTML in a ```html block."}], max_new=1000)
         m = re.search(r"```html\n(.*?)```", reply, re.S)
         return (m.group(1) if m else reply).strip()
 
