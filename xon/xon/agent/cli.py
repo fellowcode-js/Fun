@@ -214,6 +214,23 @@ def cmd_report(a):
     print(f"wrote {p}")
 
 
+def cmd_studio(a):
+    from xon.studio.server import serve
+    serve(_cfg(), port=a.port, token=a.token, open_browser=a.open)
+
+
+def cmd_mcp(a):
+    from xon.studio.mcp_server import main as mcp_main
+    if a.root:
+        os.environ["XON_HOME"] = str(Path(a.root).resolve())
+    mcp_main(a.root)
+
+
+def cmd_debug_bundle(a):
+    from xon.studio.debug import bundle
+    print(f"XON debug bundle: {bundle(_cfg(), out=Path(a.out) if a.out else None)}")
+
+
 def cmd_repl(a):
     from xon.agent.commands import dispatch
     from xon.agent.loop import Agent
@@ -321,6 +338,17 @@ def main(argv=None):
     s.add_argument("--quick", action="store_true")
     s.set_defaults(fn=cmd_gate)
     sp.add_parser("report", help="regenerate the expectations table in REPORT.md").set_defaults(fn=cmd_report)
+    s = sp.add_parser("studio", help="XON Studio: local app (chat, code, design, fix, agent) + cloud bridge")
+    s.add_argument("--port", type=int, default=8790)
+    s.add_argument("--token", help="fixed access token (default: random per run)")
+    s.add_argument("--open", action="store_true", help="open the browser")
+    s.set_defaults(fn=cmd_studio)
+    s = sp.add_parser("mcp", help="MCP server on stdio for Claude Code / Claude Desktop")
+    s.add_argument("--root", help="XON root (default: auto-detect)")
+    s.set_defaults(fn=cmd_mcp)
+    s = sp.add_parser("debug-bundle", help="write a scrubbed debug zip")
+    s.add_argument("--out")
+    s.set_defaults(fn=cmd_debug_bundle)
     s = sp.add_parser("repl", help="interactive agent with slash commands")
     s.add_argument("--mode", default="ask")
     s.set_defaults(fn=cmd_repl)

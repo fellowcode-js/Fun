@@ -1,0 +1,43 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" role="img" aria-labelledby="t">
+  <title id="t">Biscuit, the XON cat: brown and white, sitting</title>
+  <!-- tail -->
+  <path d="M188 214c34 4 52-18 44-44-5-15-20-18-24-8-3 8 6 10 8 18 4 16-10 26-30 22z" fill="#8b5a36" stroke="#4a2c18" stroke-width="4" stroke-linejoin="round"/>
+  <!-- body: brown back -->
+  <path d="M70 226c-10-44 6-92 58-96 52 4 68 52 58 96z" fill="#8b5a36" stroke="#4a2c18" stroke-width="4" stroke-linejoin="round"/>
+  <!-- white chest + front -->
+  <path d="M98 226c-6-32 4-70 30-74 26 4 36 42 30 74z" fill="#fffaf3"/>
+  <!-- front paws -->
+  <ellipse cx="108" cy="226" rx="17" ry="11" fill="#fffaf3" stroke="#4a2c18" stroke-width="4"/>
+  <ellipse cx="148" cy="226" rx="17" ry="11" fill="#fffaf3" stroke="#4a2c18" stroke-width="4"/>
+  <path d="M102 222v7M110 221v8M142 222v7M150 221v8" stroke="#c9b8a6" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- ears -->
+  <path d="M62 92 58 28l52 34z" fill="#8b5a36" stroke="#4a2c18" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M194 92l4-64-52 34z" fill="#8b5a36" stroke="#4a2c18" stroke-width="4" stroke-linejoin="round"/>
+  <path d="M68 76 66 42l28 18z" fill="#f4b6b0"/>
+  <path d="M188 76l2-34-28 18z" fill="#f4b6b0"/>
+  <!-- head: white base -->
+  <ellipse cx="128" cy="104" rx="74" ry="62" fill="#fffaf3" stroke="#4a2c18" stroke-width="4"/>
+  <!-- brown cap over the top of the head with a white blaze down the middle -->
+  <path d="M58 86c8-30 36-44 70-44s62 14 70 44c-14-4-30-2-42 6-8-14-18-20-28-20s-20 6-28 20c-12-8-28-10-42-6z" fill="#8b5a36"/>
+  <!-- brown patch over the left eye -->
+  <path d="M60 96c10-6 30-6 40 6 6 10 2 24-10 28-14 4-30-2-34-14-2-8 0-16 4-20z" fill="#a8703f"/>
+  <!-- eyes -->
+  <ellipse cx="96" cy="108" rx="13" ry="15" fill="#2b2b2b"/>
+  <ellipse cx="160" cy="108" rx="13" ry="15" fill="#2b2b2b"/>
+  <circle cx="100" cy="102" r="5" fill="#fff"/>
+  <circle cx="164" cy="102" r="5" fill="#fff"/>
+  <circle cx="92" cy="114" r="2.5" fill="#fff"/>
+  <circle cx="156" cy="114" r="2.5" fill="#fff"/>
+  <!-- cheeks -->
+  <ellipse cx="78" cy="132" rx="11" ry="7" fill="#f6c1bb" opacity=".8"/>
+  <ellipse cx="178" cy="132" rx="11" ry="7" fill="#f6c1bb" opacity=".8"/>
+  <!-- nose + mouth -->
+  <path d="M120 124h16l-8 9z" fill="#e88a8a" stroke="#4a2c18" stroke-width="2.5" stroke-linejoin="round"/>
+  <path d="M128 133c0 8-6 12-12 9M128 133c0 8 6 12 12 9" fill="none" stroke="#4a2c18" stroke-width="3" stroke-linecap="round"/>
+  <!-- whiskers -->
+  <path d="M62 122l-30-6M62 130l-32 2M194 122l30-6M194 130l32 2" stroke="#4a2c18" stroke-width="2.5" stroke-linecap="round"/>
+  <!-- collar with an X tag -->
+  <path d="M90 158c24 10 52 10 76 0" fill="none" stroke="#2f5fd0" stroke-width="8" stroke-linecap="round"/>
+  <circle cx="128" cy="170" r="11" fill="#ffd166" stroke="#4a2c18" stroke-width="3"/>
+  <path d="M123 165l10 10M133 165l-10 10" stroke="#4a2c18" stroke-width="3" stroke-linecap="round"/>
+</svg>

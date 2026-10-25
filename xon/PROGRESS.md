@@ -74,6 +74,15 @@ Re-read this first when resuming. Newest entries at the bottom of each section.
 - Cycle 4: LM promoted (ppl 15.9 -> 13.9); vision rolled back (new head undertrained: v2 F1 0.17). Cycle 5 = vision
   focused (900 GUI pages, 20 min).
 
+## v0.3: XON Studio (user asked: an app to run the local model, connectable to Claude for cloud/debugging)
+- `xon studio`: local web app / installable PWA (Biscuit icon). Chat (streaming, Run code blocks), Code (write/test/
+  fix), Design (preview + critique), Agent (live steps + thoughts), Connect, Debug. 127.0.0.1 only, token + origin check.
+- Cloud bridge: Claude or OpenAI-compatible via env var or key typed in the app (memory only).
+- `xon mcp`: MCP stdio server (15 tools) so Claude Code / Desktop can drive and debug XON; project `.mcp.json`.
+- `xon debug-bundle`: scrubbed zip (config, log tails, history, gates, artifacts, doctor, env var names only).
+- Found while testing: 100 s cold start on first chat (now preloaded, ~9 s); header overflow on phones (fixed).
+- Tests: 73 passed (6 new for Studio/MCP, fake model + fake cloud server).
+
 ## Next (if continued)
 - Tier B on a real GPU (docs/cloud.md); OCR for from_screenshot text; better icon detection.
 

@@ -13,3 +13,5 @@ __pycache__/
 *.pyc
 .pytest_cache/
 xon.zip
+workspace/
+xon-debug-*.zip

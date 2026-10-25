@@ -1,0 +1,9 @@
+{
+  "mcpServers": {
+    "xon": {
+      "command": "python3",
+      "args": ["-m", "xon.agent.cli", "mcp", "--root", "xon"],
+      "env": {"PYTHONPATH": "xon"}
+    }
+  }
+}

@@ -4,7 +4,7 @@ import zipfile
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-EXCLUDE_DIRS = {"checkpoints", "exchange", "logs", "artifacts", ".xon", "__pycache__", ".pytest_cache", "xon.egg-info", ".venv"}
+EXCLUDE_DIRS = {"checkpoints", "exchange", "logs", "artifacts", ".xon", "workspace", "__pycache__", ".pytest_cache", "xon.egg-info", ".venv"}
 OUT = Path(sys.argv[1]) if len(sys.argv) > 1 else ROOT.parent / "xon.zip"
 
 

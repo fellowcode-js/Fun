@@ -22,6 +22,7 @@ screenshot→HTML), UI-element detection, verified bug repair, and the self-trai
 - [REPORT.md](REPORT.md): what XON measurably does, every number from an eval, gate results, live vs mock, limits.
 - [PROGRESS.md](PROGRESS.md): build log (done, decisions, incidents, next); read first when resuming work.
 - [XON.md](XON.md): project memory the agent loads every session; rules for agents editing this repo.
+- [docs/studio.md](docs/studio.md): XON Studio app, connecting Claude (cloud, MCP), debug bundles.
 - [docs/cloud.md](docs/cloud.md): copy-paste steps for a rented GPU box (Tier B/C), Docker, split nodes, spot.
 - [data/samples/README.md](data/samples/README.md): the tiny license-clean samples that ship in the zip.
 
@@ -34,6 +35,14 @@ xon init                   # probes hardware, picks tier A/B/C, sizes the run (t
 xon start --all            # crawler + trainer + agent supervisor + dashboard (http://127.0.0.1:8787)
 ```
 `xon stop` (or the dashboard's STOP button) halts every node within seconds.
+
+## XON Studio (the app)
+```bash
+xon studio --open                      # local app: chat, code, design, agent, connect, debug (installable PWA)
+claude mcp add xon -- xon mcp          # let Claude Code drive XON: local model, tools, tests, logs
+xon debug-bundle                       # scrubbed zip to hand to Claude when something breaks
+```
+Details: [docs/studio.md](docs/studio.md).
 
 ## The agent
 ```bash

@@ -58,6 +58,28 @@ class PretrainedCoder:
             res.append(t[:cut])
         return res
 
+    def stream_chat(self, messages: list[dict], max_new: int = 768, temperature: float = 0.3):
+        """Yield text pieces as they are generated (for the Studio app)."""
+        import threading
+
+        import torch
+        from transformers import TextIteratorStreamer
+        prompt = self.tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
+        ids = self.tok(prompt, return_tensors="pt").to(self.dev)
+        streamer = TextIteratorStreamer(self.tok, skip_prompt=True, skip_special_tokens=True)
+        kw = dict(**ids, max_new_tokens=max_new, streamer=streamer, pad_token_id=self.tok.eos_token_id,
+                  do_sample=temperature > 0, temperature=temperature if temperature > 0 else None, top_p=0.95 if temperature > 0 else None,
+                  top_k=None)
+
+        def work():
+            with torch.no_grad():
+                self.model.generate(**kw)
+        t = threading.Thread(target=work, daemon=True)
+        t.start()
+        for piece in streamer:
+            yield piece
+        t.join()
+
     def chat(self, messages: list[dict], max_new: int = 512, temperature: float = 0.0) -> str:
         prompt = self.tok.apply_chat_template(messages, tokenize=False, add_generation_prompt=True)
         return self.generate(prompt, max_new=max_new, temperature=temperature)[0]

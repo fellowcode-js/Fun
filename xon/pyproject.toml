@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "xon"
-version = "0.1.0"
+version = "0.3.0"
 description = "XON (X-87, X-Over-Node): a self-building coding + design workstation"
 readme = "README.md"
 requires-python = ">=3.10"
@@ -30,7 +30,7 @@ xon = "xon.agent.cli:main"
 include = ["xon*"]
 
 [tool.setuptools.package-data]
-"*" = ["*.yaml", "*.html", "*.js", "*.css", "*.json"]
+"*" = ["*.yaml", "*.html", "*.js", "*.css", "*.json", "*.png", "*.svg", "*.webmanifest"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]
