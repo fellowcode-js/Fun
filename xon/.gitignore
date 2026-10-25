@@ -1,0 +1,15 @@
+data/*
+!data/samples/
+!data/samples/**
+checkpoints/*
+exchange/
+logs/
+artifacts/*
+!artifacts/.keep
+.xon/
+STOP
+__pycache__/
+*.egg-info/
+*.pyc
+.pytest_cache/
+xon.zip

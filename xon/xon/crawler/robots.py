@@ -34,10 +34,38 @@ class RobotsCache:
             rp = None
         else:
             rp.parse(text.splitlines())
+            rp._xon_delay = self._parse_delay(text)  # stdlib only accepts integer delays
             mode = "parsed"
         hit = (time.time(), rp, mode)
         self._cache[key] = hit
         return hit
+
+    def _parse_delay(self, text: str) -> float | None:
+        agents, delay_for, in_rules = [], {}, False
+        for raw in text.splitlines():
+            line = raw.split("#", 1)[0].strip()
+            if ":" not in line:
+                continue
+            k, v = (x.strip() for x in line.split(":", 1))
+            k = k.lower()
+            if k == "user-agent":
+                if in_rules:  # a new group starts
+                    agents, in_rules = [], False
+                agents.append(v.lower())
+            elif k == "crawl-delay":
+                in_rules = True
+                try:
+                    for a in agents or ["*"]:
+                        delay_for.setdefault(a, float(v))
+                except ValueError:
+                    pass
+            elif k in ("allow", "disallow"):
+                in_rules = True
+        me = self.ua.split("/")[0].lower()
+        for a, d in delay_for.items():
+            if a != "*" and a in me:
+                return d
+        return delay_for.get("*")
 
     def allowed(self, url: str) -> bool:
         _, rp, mode = self._get(url)
@@ -51,7 +79,9 @@ class RobotsCache:
         _, rp, _ = self._get(url)
         if rp is None:
             return None
-        d = rp.crawl_delay(self.ua)
+        d = getattr(rp, "_xon_delay", None)
+        if d is None:
+            d = rp.crawl_delay(self.ua)
         if d is None:
             rr = rp.request_rate(self.ua)
             if rr:

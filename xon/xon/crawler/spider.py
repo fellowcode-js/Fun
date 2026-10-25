@@ -142,10 +142,11 @@ class Spider:
         heapq.heappush(self.frontier, (priority + depth * 0.5, depth, url, category))
 
     # ---- fetching
-    def _wait_domain(self, url: str):
+    def _wait_domain(self, url: str, use_robots: bool = True):
         d = self.dom(url)
         delay = self.delay_override if self.delay_override is not None else self.ccfg["default_delay_s"]
-        cd = self.robots.crawl_delay(url) if self.delay_override is None else None
+        # robots.txt itself is fetched with use_robots=False (asking for its crawl-delay would recurse)
+        cd = self.robots.crawl_delay(url) if (self.delay_override is None and use_robots) else None
         if cd is not None:
             delay = max(delay, cd)
         now = time.time()
@@ -169,7 +170,7 @@ class Spider:
         return r, body
 
     def _fetch_text(self, url: str):
-        self._wait_domain(url)
+        self._wait_domain(url, use_robots=False)
         r, body = self._get(url)
         return r.status_code, body.decode(r.encoding or "utf-8", errors="replace")
 

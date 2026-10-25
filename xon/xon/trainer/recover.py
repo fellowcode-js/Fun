@@ -61,7 +61,7 @@ def is_oom(e: BaseException) -> bool:
 
 
 def bad_loss(loss: torch.Tensor | float) -> bool:
-    v = float(loss)
+    v = float(loss.detach()) if isinstance(loss, torch.Tensor) else float(loss)
     return math.isnan(v) or math.isinf(v)
 
 

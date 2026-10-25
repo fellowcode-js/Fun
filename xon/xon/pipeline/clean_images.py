@@ -14,7 +14,8 @@ PERSON = re.compile(r"\b(person|people|man|woman|boy|girl|child|face|portrait|se
 
 def ahash(img: Image.Image, n: int = 8) -> str:
     g = img.convert("L").resize((n, n), Image.BILINEAR)
-    px = list(g.getdata())
+    import numpy as np
+    px = np.asarray(g, dtype=np.float64).flatten().tolist()
     m = sum(px) / len(px)
     bits = "".join("1" if p > m else "0" for p in px)
     return "%016x" % int(bits, 2)

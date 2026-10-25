@@ -90,7 +90,8 @@ def load(root: Path | None = None) -> dict:
 
 
 def path(cfg: dict, key: str) -> Path:
-    p = Path(cfg["paths"][key])
+    env = os.environ.get(f"XON_{key.upper()}")
+    p = Path(env) if env else Path(cfg["paths"][key])
     if not p.is_absolute():
         p = Path(cfg["_root"]) / p
     p.mkdir(parents=True, exist_ok=True)

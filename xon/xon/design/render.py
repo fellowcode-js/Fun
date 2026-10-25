@@ -26,7 +26,7 @@ _BOXES_JS = """
 
 _STYLES_JS = """
 () => {
-  const els = [...document.body.querySelectorAll('*')].slice(0, 1500);
+  const els = [document.body, ...document.body.querySelectorAll('*')].slice(0, 1500);
   const out = [];
   for (const el of els) {
     const r = el.getBoundingClientRect();

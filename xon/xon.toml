@@ -1,0 +1,82 @@
+# XON config (written by `xon init`; edit freely)
+[xon]
+tier = "A"
+seed = 1337
+
+[paths]
+data = "data"
+checkpoints = "checkpoints"
+evalsets = "evalsets"
+artifacts = "artifacts"
+exchange = "exchange"
+logs = "logs"
+
+[budget]
+wall_hours = 0.5
+gpu_price_per_hour = 0.0
+max_dollars = 0.0
+
+[governor]
+max_disk_gb = 5.0
+max_bandwidth_mb = 500.0
+max_requests_per_hour = 600
+max_gpu_hours = 0.0
+min_free_disk_gb = 2.0
+
+[crawler]
+user_agent = "XON-crawler/0.1 (+https://github.com/fellowcode-js/fun; contact: xon-crawler@example.org)"
+default_delay_s = 2.0
+max_pages = 40
+timeout_s = 15
+max_bytes = 2000000
+live = true
+
+[lm]
+config = "tiny"
+init = "scratch"
+minutes = 9.52
+
+[vision]
+config = "tiny"
+minutes = 4.5
+
+[agent]
+backend = "auto"
+permission_mode = "ask"
+max_steps = 40
+shell_timeout_s = 120
+tool_allowlist = []
+
+[agent.hooks]
+pre_tool = []
+post_tool = []
+
+[transport]
+kind = "folder"
+url = ""
+
+[promote]
+noise_margin = 0.002
+max_regression = 0.02
+
+[distill]
+enabled = false
+
+[plan]
+tokens = 15745920
+params = 787296
+
+[plan.lm]
+vocab_size = 4096
+d_model = 96
+n_layers = 4
+n_heads = 3
+n_kv_heads = 1
+ffn_mult = 2.667
+seq_len = 256
+dropout = 0.0
+rope_base = 10000.0
+tie_embeddings = true
+grad_checkpoint = false
+n_image_tokens = 0
+image_dim = 0
