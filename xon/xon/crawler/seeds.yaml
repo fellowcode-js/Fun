@@ -1,0 +1,11 @@
+# XON crawler seeds, in priority order (lower = sooner). Live crawl is tiny and polite by default.
+# category: code | design | general.  Every seed's domain must be in allowlist.yaml.
+seeds:
+  - {url: "https://docs.python.org/3/tutorial/index.html", category: code, priority: 0}
+  - {url: "https://docs.python.org/3/library/functions.html", category: code, priority: 0}
+  - {url: "https://raw.githubusercontent.com/psf/requests/main/src/requests/structures.py", category: code, priority: 0}
+  - {url: "https://raw.githubusercontent.com/pallets/click/main/src/click/utils.py", category: code, priority: 0}
+  - {url: "https://developer.mozilla.org/en-US/docs/Web/CSS/Layout_cookbook", category: design, priority: 1}
+  - {url: "https://developer.mozilla.org/en-US/docs/Web/HTML/Element/button", category: design, priority: 1}
+  - {url: "https://www.w3.org/WAI/WCAG21/Understanding/contrast-minimum.html", category: design, priority: 1}
+  - {url: "https://raw.githubusercontent.com/feathericons/feather/main/icons/star.svg", category: design, priority: 1}
