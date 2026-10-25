@@ -1,0 +1,32 @@
+# Open seed datasets XON may download, with license checks. `allow_row_licenses` filters per-row licenses.
+sources:
+  python_stdlib:
+    kind: local
+    license: PSF-2.0
+    url: "https://docs.python.org/3/license.html"
+    note: "CPython standard library sources already on disk; license-clean seed code."
+  github_code_clean:
+    kind: hf_rows
+    dataset: codeparrot/github-code-clean
+    config: all-all
+    split: train
+    license: per-row
+    allow_row_licenses: [mit, apache-2.0, bsd-3-clause, bsd-2-clause, isc, cc0-1.0, unlicense]
+    languages: [Python, JavaScript, TypeScript, HTML, CSS]
+    url: "https://huggingface.co/datasets/codeparrot/github-code-clean"
+  mbpp:
+    kind: hf_rows
+    dataset: google-research-datasets/mbpp
+    config: sanitized
+    split: train
+    license: CC-BY-4.0
+    url: "https://huggingface.co/datasets/google-research-datasets/mbpp"
+    note: "task -> code instruction pairs with tests (train split only; XON evals use XON-written problems)."
+  xon_synth_ui:
+    kind: generated
+    license: CC0-1.0
+    note: "XON synthetic HTML/CSS pages rendered to screenshots with DOM labels."
+  xon_shapes:
+    kind: generated
+    license: CC0-1.0
+    note: "Procedural object images with captions for recognition."
