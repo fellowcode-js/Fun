@@ -1,0 +1,49 @@
+name: Build Strata APK
+
+on:
+  push:
+    branches: [ccr-f698d0f0-let0b2]
+    paths: ['strata/**', '.github/workflows/build-strata-apk.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+defaults:
+  run:
+    working-directory: strata
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install SDK parts
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "cmake;3.22.1" "platforms;android-34" "build-tools;34.0.0"
+      - name: Engine self-test
+        run: |
+          cmake -S . -B build -DCMAKE_BUILD_TYPE=Release
+          cmake --build build -j
+          ./build/strata selftest
+      - name: Build debug APK
+        working-directory: strata/android
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleDebug
+      - uses: actions/upload-artifact@v4
+        with:
+          name: Strata-SFX-debug-apk
+          path: strata/android/app/build/outputs/apk/debug/*.apk
+      - name: Publish release (direct link)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp android/app/build/outputs/apk/debug/app-debug.apk Strata-SFX.apk
+          gh release delete strata-latest --yes --cleanup-tag 2>/dev/null || true
+          gh release create strata-latest Strata-SFX.apk --title "Strata SFX" --notes "Debug APK" --target "$GITHUB_SHA"
