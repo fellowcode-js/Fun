@@ -1,0 +1,14 @@
+{
+ "subject": "stickman",
+ "motions": [
+  "walk"
+ ],
+ "color": "#3e63dd",
+ "background": "#14151a",
+ "count": 1,
+ "duration": 1.6,
+ "text": "",
+ "width": 480,
+ "height": 320,
+ "title": "a stick figure walking"
+}

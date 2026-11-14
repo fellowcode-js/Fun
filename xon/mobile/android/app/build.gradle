@@ -1,0 +1,27 @@
+plugins { id 'com.android.application' }
+
+android {
+    namespace 'com.xon.studio'
+    compileSdk 34
+    defaultConfig {
+        applicationId 'com.xon.studio'
+        minSdk 26
+        targetSdk 34
+        versionCode Integer.parseInt(System.getenv('XON_VERSION_CODE') ?: '1')
+        versionName '0.5.' + (System.getenv('XON_VERSION_CODE') ?: '1')
+    }
+    // One fixed signing key so a new APK installs over the old one and keeps the downloaded model.
+    // It is a debug key (not secret, not for the Play Store).
+    signingConfigs {
+        fixed { storeFile file('xon-debug.keystore'); storePassword 'xondebug'; keyAlias 'xon'; keyPassword 'xondebug' }
+    }
+    buildTypes {
+        debug { signingConfig signingConfigs.fixed }
+        release { signingConfig signingConfigs.fixed; minifyEnabled false }
+    }
+    sourceSets { main { assets.srcDirs = ['../../www'] } }   // the web app (with vendor runtimes) is the asset root
+    androidResources { noCompress += ['wasm', 'zip'] }       // stored uncompressed: loads faster, less RAM
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+}
+
+dependencies { implementation 'androidx.webkit:webkit:1.11.0' }

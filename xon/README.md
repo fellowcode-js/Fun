@@ -1,0 +1,126 @@
+# XON — X-87 "X-Over-Node"
+
+<img src="docs/biscuit.svg" alt="Biscuit, the brown and white XON cat" width="140" align="right">
+
+Mascot: **Biscuit**, a brown-and-white cat who naps while XON trains and narrates the dashboard.
+
+A self-building workstation for **coding and designing**. One command builds the workstation, pulls code, design
+material and image-text pairs from the web and open datasets (politely, with license checks), cleans and stores
+them, trains a small code LM and a vision net, evaluates them on frozen sets, promotes only real improvements, and
+repeats. An agent CLI (`xon`) drives it all, writes code, designs UIs, screenshots and critiques them, and fixes bugs
+— including bugs in XON's own pipeline, on a branch, merged only when tests pass.
+
+**Honest scope:** XON will not match big commercial models. It has two code models:
+- **XON LM**, trained from scratch by the cycle (under a million parameters at Tier A; pass@k on unseen problems ~0).
+- **Warm-start coder**: Qwen2.5-Coder-0.5B-Instruct (Apache-2.0), downloaded on first use, runs on CPU. It does the
+  real code writing (Python and C++), repair rewrites, page drafts and task routing. Disable with `init = "scratch"`.
+
+Every number is in `REPORT.md`. Strongest parts: design tools (computed contrast, critique, palettes, GUI layouts,
+screenshot→HTML), UI-element detection, verified bug repair, and the self-training loop with promotion gating.
+
+## Documents
+- [REPORT.md](REPORT.md): what XON measurably does, every number from an eval, gate results, live vs mock, limits.
+- [PROGRESS.md](PROGRESS.md): build log (done, decisions, incidents, next); read first when resuming work.
+- [XON.md](XON.md): project memory the agent loads every session; rules for agents editing this repo.
+- [docs/studio.md](docs/studio.md): XON Studio app, connecting Claude (cloud, MCP), debug bundles.
+- [docs/subagents.md](docs/subagents.md): spawn role sub-agents (game NPCs like a shopkeeper) with only the tools they need.
+- [docs/mobile.md](docs/mobile.md): the Android app (XON-Studio.apk), and how it stays fast on a phone.
+- [docs/exhort.md](docs/exhort.md): Exhort, which deletes broken/dead/useless neurons and reincarnates them better.
+- [docs/cloud.md](docs/cloud.md): copy-paste steps for a rented GPU box (Tier B/C), Docker, split nodes, spot.
+- [data/samples/README.md](data/samples/README.md): the tiny license-clean samples that ship in the zip.
+
+## Quick start
+```bash
+unzip xon.zip && cd xon
+./scripts/setup.sh && source .venv/bin/activate      # Windows: double-click scripts\setup.bat (untested)
+xon doctor                 # checks Python, torch, GPU, Chromium, disk, network; prints exact fixes
+xon init                   # probes hardware, picks tier A/B/C, sizes the run (try --budget 8h or '$40' --gpu-price 1.2)
+xon start --all            # crawler + trainer + agent supervisor + dashboard (http://127.0.0.1:8787)
+```
+`xon stop` (or the dashboard's STOP button) halts every node within seconds.
+
+## XON Studio on your phone
+Download **XON-Studio.apk** from the repository's Releases page and install it: chat and code with the model on
+the phone, run Python, make animations and game characters. No computer, no API keys. See [docs/mobile.md](docs/mobile.md).
+
+## XON Studio (the app)
+```bash
+xon studio --open                      # local app: chat, code, design, agent, connect, debug (installable PWA)
+claude mcp add xon -- xon mcp          # let Claude Code drive XON: local model, tools, tests, logs
+xon debug-bundle                       # scrubbed zip to hand to Claude when something breaks
+```
+Details: [docs/studio.md](docs/studio.md).
+
+## The agent
+```bash
+xon agent "build a todo app called Errands with a teal theme" --mode auto-edit --workspace errands
+xon agent "fix the failing tests in tests/test_pipeline.py"
+xon agent "design a dark landing page with three feature cards and a newsletter form"
+xon agent "design a settings screen with tabs, toggles for email alerts and dark mode, and a volume slider"
+xon agent "design a desktop app window called Pixel Studio with a sidebar with layers, brushes and history"
+xon agent "write a python function called slugify ..., e.g. 'Hello, World!' -> 'hello-world'"
+xon agent "implement a binary search in C++"
+xon design critique --path page.html          # computed WCAG contrast, targets, labels, hierarchy, spacing
+xon design from_screenshot --path shot.png --out recon.html
+xon design palette --base '#e0b000'           # accessible palette, every pair verified
+xon spawn "task"; xon agents; xon collect      # parallel agents in git worktrees
+xon repl                                       # /plan /run /review /test /diff /undo /agents /spawn /crawl /train /design /status
+```
+Permission modes: `ask` (default), `auto-edit`, `full-auto`. Project-dir jail, destructive-command denylist, no secret
+reads, every tool call logged to `artifacts/<task-id>/`. Eval sets, governor and safety filters are protected.
+
+**Tools inside the sandbox (23):** read, write, edit, glob, grep, shell, test, git (checkpoint/undo), web_fetch
+(robots-respecting), view_image, recognize, complete, design (from_prompt / from_screenshot / critique / palette /
+type / tokens), fix (fault localization + mutation search + LLM rewrite, all verified), python_run, cpp_build
+(g++/clang++, optional ASan+UBSan), lint (Python + C++), sqlite, serve (local server + screenshot + DOM checks),
+patch, think (scratchpad), docs_search (BM25 over crawled licensed docs/code), codegen.
+
+**Thinking loops:** write_code = generate code + tests, run, note the failure, retry with the error (tests frozen after
+attempt 1, task examples become authoritative asserts), then repair. Design = best of two engines, then
+critique → fix rounds until the score stops improving. Unknown tasks are routed by the local model.
+
+Brain: XON is **local only** by default: a deterministic **rules planner** handles the task shapes it knows (build
+app, write code, fix tests, design/critique a page, make an animation, create or ask sub-agents) and says so for
+anything else. (Setting `local_only = false` in `xon.toml` re-enables the optional external chat endpoints.) The local XON LM does
+completion (`xon complete`) and ranks repair candidates.
+
+## Sub-agents (XON makes its own helpers)
+```bash
+xon agent "make a sub-agent that makes animations named Pixel and have it make a red ball bouncing"
+xon agent "ask Pixel to make a stick figure waving hello"          # -> .html + .gif in subagents/pixel/
+xon agent "create a helper that designs pages, then a pricing page for a bakery"
+xon subagent new "be a shopkeeper in my game named Greta"          # game characters use your game's tools
+```
+XON picks the specialty (animator, designer, coder, tester, app builder, general helper, or a game character),
+grants only the tools it needs and gives it its own folder. Details: [docs/subagents.md](docs/subagents.md).
+
+## Local only (no API keys)
+`local_only = true` (default): XON never calls a cloud model or uses an API key. Planning is XON's own rules
+planner, chat and code use the local model, animations come from XON's own engine.
+
+## Exhort (neuron reincarnation)
+```bash
+xon exhort --dry-run      # which neurons are broken, dead or useless
+xon exhort --apply        # delete them, rebirth them (gradient-guided), heal, keep only if validation improves
+```
+Also runs after every LM training run. Details and honest numbers: [docs/exhort.md](docs/exhort.md).
+
+## Nodes
+Crawler, trainer and agent talk only through files in a shared exchange (folder, rsync or S3-compatible bucket):
+`xon start --node crawler` on one box, `xon start --node trainer` on another. See `docs/cloud.md`.
+
+## Milestone gates
+`xon gate m0` … `m4` run automated checks (M0: fresh Tier A end-to-end < 30 min; M4: agent builds + designs an app
+and fixes a seeded bug in XON's pipeline). Results land in `REPORT.md` via `xon report`.
+
+## Layout
+`xon/workstation` (init, doctor, governor, budget, dashboard) · `xon/nodes` · `xon/crawler` · `xon/datasets` ·
+`xon/pipeline` · `xon/tokenizer` · `xon/lm` · `xon/vision` · `xon/design` · `xon/trainer` · `xon/agent` ·
+`evalsets/` (frozen) · `tests/` · `scripts/` · `docs/`.
+
+## Legal and safety
+robots.txt + crawl-delay, honest user agent with contact, per-domain limits, allowlist/denylist, no forms or logins,
+license captured per item (no-train and all-rights-reserved skipped), PII and secrets scrubbed, unsafe content
+quarantined, design tools refuse to reproduce named brands' logos or trade dress. No scraped data ships in the zip.
+
+Related: [REPORT.md](REPORT.md) (measured results), [PROGRESS.md](PROGRESS.md) (build log), [docs/cloud.md](docs/cloud.md) (GPU setup).

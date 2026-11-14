@@ -1,0 +1,11 @@
+{
+  "name": "xon-mobile",
+  "private": true,
+  "description": "XON Studio for phones: the web app inside the Android APK. Vendor files are copied in by scripts/vendor.mjs.",
+  "scripts": {"vendor": "node scripts/vendor.mjs"},
+  "dependencies": {
+    "@huggingface/transformers": "4.3.2",
+    "gifenc": "1.0.3",
+    "pyodide": "314.0.8"
+  }
+}

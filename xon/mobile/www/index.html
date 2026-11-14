@@ -1,0 +1,112 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover,interactive-widget=resizes-content">
+<title>XON Studio</title>
+<meta name="theme-color" content="#8b5a36">
+<link rel="icon" href="biscuit.svg" type="image/svg+xml">
+<style>
+:root{--bg:#f6f5f3;--panel:#fff;--text:#1d1a17;--muted:#655d55;--line:#e6e0d8;--accent:#8b5a36;--accent-ink:#fff;--soft:#f3e7dc;--ok:#1f7a3f;--bad:#b42318;--code:#1e1b18;--code-ink:#f3ede6;--user:#f3e7dc}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]){--bg:#141210;--panel:#1c1916;--text:#efe9e2;--muted:#a99f94;--line:#2f2a25;--accent:#d39b6a;--accent-ink:#1a120b;--soft:#2c2219;--ok:#5fd18a;--bad:#ff7b6b;--code:#0e0c0a;--code-ink:#efe9e2;--user:#2c2219}}
+:root[data-theme="dark"]{--bg:#141210;--panel:#1c1916;--text:#efe9e2;--muted:#a99f94;--line:#2f2a25;--accent:#d39b6a;--accent-ink:#1a120b;--soft:#2c2219;--ok:#5fd18a;--bad:#ff7b6b;--code:#0e0c0a;--code-ink:#efe9e2;--user:#2c2219}
+*{box-sizing:border-box}[hidden]{display:none!important}
+html,body{height:100%;margin:0}
+body{background:var(--bg);color:var(--text);font:16px/1.5 system-ui,-apple-system,"Segoe UI",sans-serif;display:flex;flex-direction:column;overscroll-behavior:none}
+button,input,textarea,select{font:inherit;color:inherit}
+button{cursor:pointer;border-radius:12px;border:1px solid var(--line);background:var(--panel);padding:8px 14px;min-height:44px}
+button.primary{background:var(--accent);color:var(--accent-ink);border-color:var(--accent);font-weight:650}
+button:disabled{opacity:.5}
+input,textarea,select{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:10px 12px;min-height:44px;width:100%}
+textarea{resize:none}
+:focus-visible{outline:3px solid var(--accent);outline-offset:2px}
+header{display:flex;align-items:center;gap:10px;padding:calc(10px + env(safe-area-inset-top)) 16px 10px;background:var(--panel);border-bottom:1px solid var(--line)}
+header img{width:34px;height:34px}header b{font-size:17px}
+#status{margin-left:auto;font-size:12px;color:var(--muted);text-align:right;line-height:1.3}
+.dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--muted);margin-right:5px}.dot.on{background:var(--ok)}.dot.busy{background:#e2a336}
+main{flex:1;min-height:0;display:flex;flex-direction:column}
+.view{display:none;flex:1;min-height:0;flex-direction:column}.view.on{display:flex}
+.scroll{flex:1;overflow:auto;padding:14px 16px;display:flex;flex-direction:column;gap:12px}
+.msg{display:flex;flex-direction:column;gap:3px;min-width:0}.msg .who{font-size:12px;color:var(--muted)}
+.bubble{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:9px 13px;overflow-wrap:anywhere;min-width:0;max-width:100%}
+.msg.me{align-items:flex-end}.msg.me .bubble{background:var(--user)}.bubble p{margin:.3em 0}
+.meta{font-size:12px;color:var(--muted)}
+.codebox{margin:8px 0;border-radius:10px;overflow:hidden;background:var(--code);color:var(--code-ink)}
+.codebar{display:flex;align-items:center;gap:6px;padding:4px 8px;font-size:12px;background:#ffffff14}.codebar span{margin-right:auto;opacity:.8}
+.codebar button{min-height:32px;padding:2px 12px;font-size:13px;background:transparent;color:var(--code-ink);border-color:#ffffff33}
+pre{margin:0;padding:10px 12px;overflow:auto;font:13px/1.45 ui-monospace,Menlo,monospace}
+.runout{font:12px/1.4 ui-monospace,monospace;padding:8px 12px;border-top:1px solid #ffffff22;white-space:pre-wrap}.runout.ok{color:#7ee2a2}.runout.bad{color:#ff9a8f}
+.composer{display:flex;gap:8px;align-items:flex-end;padding:10px 12px;background:var(--panel);border-top:1px solid var(--line)}
+.composer textarea{min-height:44px;max-height:140px}
+.empty{margin:auto;text-align:center;color:var(--muted);max-width:340px}.empty img{width:96px}
+.chips{display:flex;flex-wrap:wrap;gap:8px}.chips button{border-radius:999px;font-size:14px;min-height:38px;padding:6px 12px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:14px}
+.card h2{font-size:16px;margin:0 0 8px}
+.note{font-size:13px;color:var(--muted)}
+.row{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.seg{display:flex;border:1px solid var(--line);border-radius:12px;overflow:hidden}.seg button{flex:1;border:0;border-radius:0;background:transparent}.seg button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);font-weight:650}
+.tools{display:flex;flex-wrap:wrap;gap:6px}.tool{font:12px ui-monospace,monospace;border:1px solid var(--line);border-radius:6px;padding:2px 8px}
+.act{font:12px/1.5 ui-monospace,monospace;color:var(--muted);overflow-wrap:anywhere}
+.agents{display:flex;gap:8px;overflow-x:auto;padding-bottom:2px}.agents button{border-radius:999px;white-space:nowrap}.agents button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink)}
+.bar{height:8px;border-radius:4px;background:var(--line);overflow:hidden}.bar i{display:block;height:100%;background:var(--accent);width:0}
+.stat{display:grid;grid-template-columns:auto 1fr;gap:4px 12px;font-size:14px}
+nav{display:flex;background:var(--panel);border-top:1px solid var(--line);padding-bottom:env(safe-area-inset-bottom)}
+nav button{flex:1;border:0;border-radius:0;background:transparent;display:flex;flex-direction:column;align-items:center;gap:2px;font-size:12px;padding:8px 0;min-height:56px;color:var(--muted)}
+nav button[aria-current="page"]{color:var(--accent);font-weight:650}nav svg{width:22px;height:22px}
+</style>
+</head>
+<body>
+<header><img src="biscuit.svg" alt="Biscuit, the XON cat"><b>XON Studio</b><div id="status"><span class="dot" id="mdot"></span><span id="mtext">model not loaded</span><br><span id="mspeed"></span></div></header>
+<main>
+  <section class="view on" id="v-chat" aria-label="Chat">
+    <div class="scroll" id="msgs">
+      <div class="empty" id="empty"><img src="biscuit.svg" alt=""><h2>Hi, I'm Biscuit.</h2>
+        <p>Everything here runs on your phone. No API keys, nothing leaves the device. The first message downloads XON's coder model once (about 560 MB, Wi-Fi recommended).</p>
+        <div class="chips" style="justify-content:center"><button data-ex="Write a Python function that checks if a word is a palindrome, with a few asserts.">Palindrome in Python</button><button data-ex="Explain recursion in two sentences.">Explain recursion</button><button data-ex="Write a Python function that returns the n-th Fibonacci number, then print the first 10.">Fibonacci</button></div></div>
+    </div>
+    <div class="composer"><textarea id="input" rows="1" placeholder="Ask about code..." aria-label="Message"></textarea><button class="primary" id="send" aria-label="Send">Send</button><button id="stop" hidden>Stop</button></div>
+  </section>
+
+  <section class="view" id="v-helpers" aria-label="Helpers">
+    <div class="scroll" id="hscroll">
+      <div class="card"><h2>Make a helper</h2>
+        <div class="row"><input id="h-task" value="a helper that makes animations" aria-label="What should the helper do?"><button class="primary" id="h-go">Create</button></div>
+        <div class="chips" style="margin-top:8px"><button data-h="a helper that makes animations named Pixel">Animator</button><button data-h="a coder named Byte that writes Python">Coder</button><button data-h="be a shopkeeper in my game named Greta">Shopkeeper (game)</button><button data-h="a town guard called Volk">Guard (game)</button></div>
+        <div class="agents" id="h-list" style="margin-top:10px"></div>
+      </div>
+      <div class="card" id="h-card" hidden><h2 id="h-title"></h2><div class="tools" id="h-tools"></div><p class="note" id="h-persona"></p>
+        <div id="h-log" style="display:flex;flex-direction:column;gap:10px"></div>
+        <div class="chips" id="h-chips" style="margin-top:10px"></div>
+      </div>
+    </div>
+    <div class="composer"><textarea id="h-msg" rows="1" placeholder="give it a job" aria-label="Message to helper"></textarea><button class="primary" id="h-send">Go</button></div>
+  </section>
+
+  <section class="view" id="v-speed" aria-label="Speed">
+    <div class="scroll">
+      <div class="card"><h2>Speed</h2>
+        <p class="note">Fast is quickest with shorter answers; Best writes longer answers and remembers more of the chat.</p>
+        <div class="seg" id="mode"><button data-v="fast">Fast</button><button data-v="balanced">Balanced</button><button data-v="best">Best</button></div>
+        <h2 style="margin-top:14px">Engine</h2>
+        <div class="seg" id="engine"><button data-v="auto">Auto</button><button data-v="gpu">GPU</button><button data-v="cpu">CPU</button></div>
+        <p class="note">Auto uses your phone's GPU (WebGPU) when it has one, otherwise all fast CPU cores with an 8-bit model.</p>
+        <h2 style="margin-top:14px">Memory</h2>
+        <label class="row note"><input type="checkbox" id="idle" style="width:auto;min-height:0"> Free the model's memory after 10 minutes idle (saves battery; next answer reloads in a few seconds)</label>
+      </div>
+      <div class="card"><h2>This phone</h2><div class="stat" id="hw"></div>
+        <div class="row" style="margin-top:10px"><button id="bench">Run speed test</button><button id="unload">Free memory now</button></div>
+        <div class="bar" style="margin-top:10px" hidden id="dlbar"><i id="dlfill"></i></div><p class="note" id="benchout"></p>
+      </div>
+      <div class="card"><h2>About</h2><p class="note">XON Studio for phones. Model: Qwen2.5-Coder-0.5B-Instruct (Apache-2.0), run on-device with ONNX Runtime; Python runs with Pyodide. Training, Exhort and C++ need the desktop XON.</p>
+        <div class="row"><button id="theme">Light / dark</button><button id="resettown">Reset game town</button></div></div>
+    </div>
+  </section>
+</main>
+<nav aria-label="Sections">
+  <button data-v="chat" aria-current="page"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 5h16v11H8l-4 4z"/></svg>Chat</button>
+  <button data-v="helpers"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M2 20c.8-4 11.2-4 12 0M14 19c.5-3 7-3 8 0"/></svg>Helpers</button>
+  <button data-v="speed"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 14l4-5"/><path d="M3 18a9 9 0 1 1 18 0"/></svg>Speed</button>
+</nav>
+<script type="module" src="app.js"></script>
+</body>
+</html>

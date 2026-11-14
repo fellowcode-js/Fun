@@ -1,0 +1,14 @@
+{
+ "subject": "ball",
+ "motions": [
+  "bounce"
+ ],
+ "color": "#e5484d",
+ "background": "#14151a",
+ "count": 1,
+ "duration": 1.6,
+ "text": "",
+ "width": 480,
+ "height": 320,
+ "title": "a red ball bouncing"
+}
