@@ -131,7 +131,7 @@ def test_xon_spawns_and_delegates(tmp_path):
     ag = Agent(tmp_path, mode="auto-edit", assume_yes=True)
     r = ag.run("make a sub-agent that makes animations named Flip and have it make three yellow stars spinning")
     assert r["created"] == "flip" and r["role"] == "animator"
-    assert "stars" in " ".join(r["first_job"]["files"]) and "spins" in r["first_job"]["reply"]
+    assert "stars" in " ".join(r["first_job"]["files"]) and "3 stars that spin" in r["first_job"]["reply"]
     r = ag.run("ask Flip to make a stick figure walking")
     assert r["ok"] and "walks" in r["reply"]
     r = ag.run("ask Nobody to make a ball")
