@@ -6,7 +6,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 
 MODULES = ["read", "write", "edit", "glob", "grep", "shell", "test", "git", "web_fetch", "view_image", "recognize",
-           "complete", "design", "fix", "python_run", "cpp_build", "lint", "sqlite", "serve", "patch", "think", "docs_search", "codegen"]
+           "complete", "design", "fix", "python_run", "cpp_build", "lint", "sqlite", "serve", "patch", "think", "docs_search", "codegen", "animate", "subagent"]
 
 
 @dataclass

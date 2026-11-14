@@ -1,0 +1,14 @@
+{
+ "subject": "heart",
+ "motions": [
+  "pulse"
+ ],
+ "color": "#e93d82",
+ "background": "#14151a",
+ "count": 1,
+ "duration": 1.6,
+ "text": "",
+ "width": 480,
+ "height": 320,
+ "title": "a pink heart beating"
+}

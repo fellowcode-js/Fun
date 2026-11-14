@@ -47,11 +47,11 @@ TOOLS = {
     "xon_doctor": ("Run `xon doctor` (Python, torch, GPU, browser, disk, network, warm-start model) and return the report.", _s({})),
     "xon_evals": ("Latest measured numbers: last cycle metrics, warm-start coder eval, gate results.", _s({})),
     "xon_debug_bundle": ("Write a scrubbed debug zip (config, log tails, history, gates, artifacts, doctor) and return its path.", _s({})),
-    "xon_subagent_new": ("Spawn a role sub-agent (NPC or helper) from a one-line task, e.g. 'be a shopkeeper in my game named "
-                         "Greta'. toolkit: demo (built-in town), code, or a path to game_tools.json. It only gets the tools its "
-                         "role needs (allow/deny: comma-separated overrides).",
+    "xon_subagent_new": ("Create a sub-agent from a one-line task: a specialist ('a helper that makes animations', 'a designer', "
+                         "'a coder') that works with XON's own tools in its own folder, or a game character ('be a shopkeeper "
+                         "in my game named Greta', toolkit: demo or a game_tools.json path). It only gets the tools its role needs.",
                          _s({"task": STR, "toolkit": STR, "name": STR, "allow": STR, "deny": STR, "brain": STR}, ["task"])),
-    "xon_subagent_talk": ("Say something to a sub-agent as a player. Returns its reply and every tool call it made.",
+    "xon_subagent_talk": ("Give a sub-agent a job (specialist) or a line of dialogue (character). Returns its reply, files and tool calls.",
                           _s({"id": STR, "message": STR, "player": STR}, ["id", "message"])),
     "xon_subagents": ("List sub-agents with their roles and granted tools.", _s({})),
     "xon_exhort": ("Exhort the promoted XON LM: find broken/dead/useless neurons, reincarnate them, heal, keep only if "
@@ -149,10 +149,10 @@ class Server:
             if name == "xon_subagent_new":
                 sp = lambda v: [x.strip() for x in (v or "").split(",") if x.strip()]
                 tk = a.get("toolkit") or None
-                if tk not in (None, "demo", "code"):
+                if tk not in (None, "demo"):
                     tk = str(jail(self.root, tk))
                 return S.create(a["task"], tk, name=a.get("name"), allow=sp(a.get("allow")), deny=sp(a.get("deny")),
-                                brain=a.get("brain", "auto"), root=self.root).spec
+                                brain=a.get("brain", "rules"), root=self.root).spec
             return S.load(a["id"], self.root).talk(a["message"], player=a.get("player") or "player")
         if name == "xon_exhort":
             from xon.exhort import exhort_promoted

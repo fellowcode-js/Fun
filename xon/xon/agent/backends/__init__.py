@@ -5,7 +5,22 @@ from __future__ import annotations
 import os
 
 
-def pick(name: str = "auto"):
+def local_only(cfg: dict | None = None) -> bool:
+    if os.environ.get("XON_LOCAL_ONLY") in ("0", "false"):
+        return False
+    if cfg is None:
+        from xon import config
+        cfg = config.load()
+    return bool(cfg.get("xon", {}).get("local_only", True))
+
+
+def pick(name: str = "auto", cfg: dict | None = None):
+    if local_only(cfg):  # no cloud brains at all
+        if name == "local":
+            from .local import LocalBackend
+            return LocalBackend()
+        from .rules import RulesBackend
+        return RulesBackend()
     if name in ("auto", "anthropic") and os.environ.get("ANTHROPIC_API_KEY"):
         from .anthropic_compat import AnthropicBackend
         return AnthropicBackend()

@@ -56,6 +56,9 @@ class State:
         return self._coder
 
     def cloud_backend(self, provider: str):
+        from xon.agent.backends import local_only
+        if local_only(self.cfg):
+            return None
         c = self.cloud.get(provider, {})
         if provider == "anthropic":
             from xon.agent.backends.anthropic_compat import AnthropicBackend
@@ -77,7 +80,7 @@ class State:
         from xon.lm import pretrained
         ck = config.path(self.cfg, "checkpoints") / "promoted"
         return {
-            "version": __version__, "workspace": str(self.workspace),
+            "version": __version__, "workspace": str(self.workspace), "local_only": __import__("xon.agent.backends", fromlist=["x"]).local_only(self.cfg),
             "models": {
                 "local": {"name": self.cfg["lm"].get("pretrained", pretrained.DEFAULT), "available": pretrained.available()
                           and self.cfg["lm"].get("init") == "pretrained", "loaded": self._coder is not None, "error": self._coder_err,
@@ -160,10 +163,24 @@ def make_handler(st: State):
                 return self._json(200, _job_view(job))
             if path == "/api/subagents":
                 from xon.agent import subagents as S
-                return self._json(200, {"agents": S.list_all(st.root)})
+                return self._json(200, {"agents": S.list_all(st.workspace)})
+            if path == "/api/file":  # files made by sub-agents (previews); sandboxed when it is a page
+                from xon.agent.sandbox import jail
+                rel = parse_qs(urlsplit(self.path).query).get("path", [""])[0]
+                try:
+                    f = jail(st.workspace, rel)
+                except Exception:
+                    return self._json(404, {"error": "no such file"})
+                if not rel.startswith("subagents/") or not f.is_file():
+                    return self._json(404, {"error": "no such file"})
+                types = {".gif": "image/gif", ".png": "image/png", ".html": "text/html; charset=utf-8", ".json": "application/json"}
+                if f.suffix not in types:
+                    return self._json(415, {"error": "unsupported type"})
+                return self._send(200, types[f.suffix], f.read_bytes(),
+                                  {"Content-Security-Policy": "sandbox allow-scripts"} if f.suffix == ".html" else None)
             if path == "/api/game/demo":
                 from xon.game import DemoGame
-                return self._json(200, DemoGame.shared(st.root).state)
+                return self._json(200, DemoGame.shared(st.workspace).state)
             if path == "/api/exhort":
                 return self._json(200, {"history": _tail_jsonl(config.path(st.cfg, "logs") / "exhort.jsonl", 10)})
             if path == "/api/debug-bundle":
@@ -194,10 +211,13 @@ def make_handler(st: State):
                     return self._json(200, _subagent_talk(st, body))
                 if path == "/api/subagents/delete":
                     from xon.agent import subagents as S
-                    return self._json(200, {"ok": S.remove(body.get("id", ""), st.root)})
+                    return self._json(200, {"ok": S.remove(body.get("id", ""), st.workspace)})
                 if path == "/api/exhort":
                     return self._json(200, _exhort(st, body))
                 if path == "/api/cloud":
+                    from xon.agent.backends import local_only
+                    if local_only(st.cfg):
+                        return self._json(403, {"error": "XON is local-only: cloud models are switched off ([xon] local_only in xon.toml)"})
                     prov = body.get("provider")
                     if prov not in ("anthropic", "openai"):
                         return self._json(400, {"error": "provider must be anthropic or openai"})
@@ -306,41 +326,42 @@ def _subagent_new(st: State, body: dict) -> dict:
     if not task:
         raise ValueError("describe the sub-agent, e.g. 'be a shopkeeper in my game'")
     tk = body.get("toolkit") or None
-    if tk not in (None, "demo", "code"):
+    if tk in ("auto", "xon"):
+        tk = None
+    if tk not in (None, "demo"):
         tk = json.loads(tk) if isinstance(tk, str) and tk.lstrip().startswith("{") else tk
         if isinstance(tk, str):
-            raise ValueError("toolkit must be demo, code, or pasted game_tools.json content")
+            raise ValueError("toolkit must be auto, demo, or pasted game_tools.json content")
     sa = S.create(task, tk, name=body.get("name") or None, role=body.get("role") or None, allow=_split(body.get("allow")),
-                  deny=_split(body.get("deny")), brain=body.get("brain", "auto"), root=st.root)
-    return {"ok": True, "agent": sa.spec, "tools": sa.tk.specs()}
+                  deny=_split(body.get("deny")), brain=body.get("brain", "rules"), root=st.workspace)
+    if sa.is_specialist:
+        from xon.agent.tools import MODULES
+        names = [m for m in MODULES if m != "subagent"]
+    else:
+        names = list(sa.tk.tools)
+    return {"ok": True, "agent": sa.spec, "tools": [{"name": n} for n in names]}
 
 
 def _subagent_talk(st: State, body: dict) -> dict:
     from xon.agent import subagents as S
-    sa = S.load(body.get("id", ""), st.root)
+    sa = S.load(body.get("id", ""), st.workspace)
     msg = (body.get("message") or "").strip()
     if not msg:
         raise ValueError("empty message")
-    brain = body.get("brain") or sa.spec.get("brain", "auto")
-    backend = None
-    if brain in ("auto", "cloud"):
-        backend = st.cloud_backend("anthropic") or st.cloud_backend("openai")
-        if backend is None and brain == "cloud":
-            raise ValueError("no cloud key: add one in Connect, or use the rules / local brain")
-        brain = "cloud" if backend is not None else "rules"
-    if brain == "local":
-        coder = st.coder()
-        if not st.lock.acquire(timeout=30):
+    brain = body.get("brain") or sa.spec.get("brain", "rules")
+    if brain == "local" or sa.is_specialist:  # specialists may use the local coder; one model job at a time
+        coder = st.coder() if brain == "local" else None
+        if not st.lock.acquire(timeout=120):
             raise RuntimeError("local model is busy")
         try:
-            r = sa.talk(msg, player=body.get("player") or "player", brain="local", voice=coder)
+            r = sa.talk(msg, player=body.get("player") or "player", brain=brain, voice=coder)
         finally:
             st.lock.release()
     else:
-        r = sa.talk(msg, player=body.get("player") or "player", brain=brain, backend=backend)
-    if sa.spec.get("toolkit") == "demo":
+        r = sa.talk(msg, player=body.get("player") or "player", brain="rules")
+    if not sa.is_specialist and sa.spec.get("toolkit") == "demo":
         from xon.game import DemoGame
-        g = DemoGame.shared(st.root).state
+        g = DemoGame.shared(st.workspace).state
         r["world"] = {"player": g["players"].get(body.get("player") or "player"), "shop_gold": g["shop"]["gold"],
                       "gate_open": g["gate_open"], "log": g["log"][-5:]}
     return r

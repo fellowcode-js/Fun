@@ -284,16 +284,20 @@ def cmd_subagent(a):
         sa = S.load(a.args[0], root)
         line = " ".join(a.args[1:])
         def say(msg):
-            r = sa.talk(msg, player=a.player, brain=a.brain if a.brain != "auto" else None)
+            r = sa.talk(msg, player=a.player, brain=a.brain)
             for act in r["actions"]:
-                res = act["result"]
-                mark = "DENIED" if res.get("denied") else ("ok" if res.get("ok", True) else "fail")
-                print(f"   [{act['tool']}({', '.join(f'{k}={v}' for k, v in act['args'].items())}) -> {mark}]")
+                res = act["result"] or {}
+                mark = "DENIED" if res.get("denied") else ("ok" if res.get("ok", True) is not False else "fail")
+                args = ", ".join(f"{k}={str(v)[:60]}" for k, v in act["args"].items())
+                print(f"   [{act['tool']}({args}) -> {mark}]")
             print(f"{sa.name}: {r['reply']}")
+            for f in r.get("files") or []:
+                print(f"   file: {f}")
         if line:
             say(line)
             return 0
-        print(f"Talking to {sa.name} ({sa.spec['role']}, brain {sa.brain()}). Empty line or Ctrl+D to leave.")
+        print(f"Talking to {sa.name} ({sa.spec['role']}). " + ("Give it jobs. " if sa.is_specialist else "") +
+              "Empty line or Ctrl+D to leave.")
         while True:
             try:
                 msg = input(f"{a.player}> ").strip()
@@ -416,15 +420,17 @@ def main(argv=None):
     s.add_argument("--heal-steps", type=int)
     s.add_argument("--max-frac", type=float)
     s.set_defaults(fn=cmd_exhort)
-    s = sp.add_parser("subagent", help="spawn role sub-agents (NPCs) with game tools: new | list | show | talk | rm")
+    s = sp.add_parser("subagent", help="sub-agents for any job (animator, designer, coder...) or game characters: "
+                      "new | list | show | talk | rm")
     s.add_argument("action", choices=["new", "list", "show", "talk", "rm"])
     s.add_argument("args", nargs="*", help="new: the task text; talk: ID [message]; show/rm: ID")
-    s.add_argument("--toolkit", help="demo (built-in town), code, or a game_tools.json path")
+    s.add_argument("--toolkit", help="for game characters: demo (built-in town) or a game_tools.json path")
     s.add_argument("--name")
-    s.add_argument("--role", help="force a role: " + "shopkeeper, blacksmith, innkeeper, guard, questgiver, coder, npc")
+    s.add_argument("--role", help="force a role: animator, designer, coder, tester, builder, helper, "
+                   "shopkeeper, blacksmith, innkeeper, guard, questgiver, npc")
     s.add_argument("--allow", help="extra tools to grant, comma separated")
     s.add_argument("--deny", help="tools to withhold, comma separated")
-    s.add_argument("--brain", default="auto", choices=["auto", "rules", "local", "cloud"])
+    s.add_argument("--brain", default="rules", choices=["rules", "local"], help="local = the local model re-voices character lines")
     s.add_argument("--player", default="player")
     s.add_argument("--root")
     s.set_defaults(fn=cmd_subagent)

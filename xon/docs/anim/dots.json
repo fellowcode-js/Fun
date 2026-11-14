@@ -1,0 +1,14 @@
+{
+ "subject": "dots",
+ "motions": [
+  "pulse"
+ ],
+ "color": "#8e4ec6",
+ "background": "#14151a",
+ "count": 3,
+ "duration": 1.6,
+ "text": "",
+ "width": 480,
+ "height": 320,
+ "title": "loading dots in purple"
+}

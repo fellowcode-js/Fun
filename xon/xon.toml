@@ -2,6 +2,7 @@
 [xon]
 tier = "A"
 seed = 1337
+local_only = true   # never use cloud models or API keys
 
 [paths]
 data = "data"

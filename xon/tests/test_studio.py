@@ -67,7 +67,9 @@ def test_streaming_chat_local(studio):
     assert code == 200 and "".join(e.get("t", "") for e in ev) == "Hello from the local model." and ev[-1]["done"]
 
 
-def test_cloud_bridge_with_fake_openai_server(studio):
+def test_cloud_bridge_with_fake_openai_server(studio, monkeypatch):
+    """Only when the user explicitly turns local-only off (XON_LOCAL_ONLY=0); off by default."""
+    monkeypatch.setenv("XON_LOCAL_ONLY", "0")
     base, st = studio
     seen = []
 
@@ -153,7 +155,7 @@ def test_subagent_endpoints(studio):
     from xon.game import DemoGame
     DemoGame._shared.clear()
     base, _ = studio
-    code, body = req(base + "/api/subagents", {"task": "be a shopkeeper in my game named Greta", "toolkit": "demo", "brain": "rules"})
+    code, body = req(base + "/api/subagents", {"task": "be a shopkeeper in my game named Greta", "toolkit": "demo"})
     r = json.loads(body)
     assert code == 200 and r["agent"]["id"] == "greta" and "open_gate" not in r["agent"]["tools"]
     assert any(a["id"] == "greta" for a in json.loads(req(base + "/api/subagents")[1])["agents"])
@@ -169,3 +171,21 @@ def test_exhort_endpoint_without_model(studio):
     r = json.loads(req(base + "/api/exhort", {"dry_run": True})[1])
     assert r["ok"] is False and "xon train" in r["error"]
     assert json.loads(req(base + "/api/exhort")[1])["history"] == []
+
+
+def test_studio_is_local_only(studio):
+    base, st = studio
+    info = json.loads(req(base + "/api/info")[1])
+    assert info["local_only"] and not info["models"]["anthropic"]["available"]
+    assert req(base + "/api/cloud", {"provider": "anthropic", "key": "sk-x"})[0] == 403
+
+
+def test_specialist_in_studio_with_preview(studio):
+    base, _ = studio
+    r = json.loads(req(base + "/api/subagents", {"task": "a helper that makes animations named Pixel"})[1])
+    assert r["agent"]["role"] == "animator"
+    t = json.loads(req(base + "/api/subagents/talk", {"id": "pixel", "message": "a pink heart beating"})[1])
+    gif = [f for f in t["files"] if f.endswith(".gif")][0]
+    code, body = req(base + "/api/file?path=" + gif)
+    assert code == 200 and body[:6] == b"GIF89a"
+    assert req(base + "/api/file?path=../xon.toml")[0] == 404

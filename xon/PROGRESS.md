@@ -102,6 +102,20 @@ Re-read this first when resuming. Newest entries at the bottom of each section.
   cycle: 24 reborn, kept), Studio screenshots of chat, sub-agents and Exhort.
 - Tests: 88 passed (fast suite; 15 new).
 
+## v0.4.1 (user: XON must never use API keys, only its own models/data; sub-agents are for any task, created by
+## XON itself, e.g. one that makes animations)
+- `[xon] local_only = true` default: backends.pick never returns a cloud brain; Studio hides cloud controls and
+  refuses /api/cloud; the sub-agent cloud brain was removed. Old cloud tests now opt in with XON_LOCAL_ONLY=0.
+- Animation engine (`xon/design/animate.py`) + `animate` tool + `animate` recipe: one motion model -> SVG/CSS page
+  and GIF, squash/stretch, shadows, stick-figure kinematics, self-check (moves / loop seam / stays on stage).
+- Sub-agents generalized: specialists (animator, designer, coder, tester, builder, helper) run XON's own agent loop
+  in `subagents/<id>/` restricted to their tools; game characters kept. New `subagent` agent tool; the rules
+  planner routes "make a sub-agent ... (and have it ...)" and "ask <name> to ...".
+- Found while testing: the planner loaded the 1 GB coder on every run just to route (now lazy, only for unknown
+  tasks); "and have it make" not split off as a first job; character created without a toolkit saved as "inline";
+  /api/file crashed the connection on a path escape (now 404); walker clipped the stage edge; idle legs overlapped.
+- Tests: 104 passed (fast suite).
+
 ## Next (if continued)
 - Tier B on a real GPU (docs/cloud.md); OCR for from_screenshot text; better icon detection.
 

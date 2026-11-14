@@ -14,6 +14,11 @@ class RulesBackend:
 
     def classify(self, task: str) -> str:
         t = task.lower()
+        if re.search(r"\b(make|create|spawn|hire|build|set up|give me|add)\b.{0,24}\b(sub-?agents?|helpers?|assistants?|specialists?|workers?)\b", t):
+            return "spawn_subagent"
+        if re.match(r"\s*(ask|tell|have|let|get)\s+[\w-]+\s+(to\s+)?\w", t) and re.search(r"\b(ask|tell|have|let|get)\s+([\w-]+)", t) \
+                and not re.match(r"\s*(let|get)\s+(me|us|it|the|a)\b", t):
+            return "delegate"
         if re.search(r"\b(fix|repair|debug)\b.*\b(test|bug|fail)", t) or re.search(r"failing tests?", t):
             return "fix_tests"
         if re.search(r"\b(build|create|make|scaffold)\b.*\b(todo|to-do|checklist|task list)\b", t):
@@ -23,6 +28,9 @@ class RulesBackend:
             return "write_code"
         if re.search(r"\b(build|create|make|scaffold)\b.*\b(app|tool|tracker|list)\b", t):
             return "build_app"
+        if re.search(r"\banimat\w*|\b(gif|walk cycle|keyframes?|looping)\b|\b(bouncing|spinning|waving|pulsing|floating|walking|jumping) \w+", t) \
+                or re.search(r"\b(ball|star|heart|stick ?figure|dots|spinner)\b.*\b(bounc|spin|wav|puls|float|walk|jump|orbit|shak)\w*", t):
+            return "animate"
         if re.search(r"\bcritique|review the design|audit\b", t):
             return "critique"
         if re.search(r"\b(design|page|landing|layout|website|ui)\b", t):
@@ -48,8 +56,13 @@ class RulesBackend:
             "write_code": ["Generate implementation + tests with the local pretrained coder", "Compile/run the tests in the sandbox",
                            "If they fail: note the failure in the scratchpad, feed the error back, regenerate (up to 3 attempts)",
                            "Still failing: localize + mutation repair against the generated tests", "Lint, checkpoint, summary"],
-            "unknown": ["The rules planner does not recognize this task. Set ANTHROPIC_API_KEY or XON_OPENAI_KEY "
-                        "(+XON_OPENAI_BASE) to plan arbitrary tasks with an external model."],
+            "animate": ["Parse the description (subject, motion, colour, speed, count)", "Render the motion to SVG/CSS + GIF",
+                        "Self-check: it moves, loops cleanly, stays on stage", "Screenshot the page", "Checkpoint"],
+            "spawn_subagent": ["Work out the specialty from the request", "Pick the XON tools that specialty needs (nothing else)",
+                               "Create the sub-agent with its own folder", "If a first job was given, hand it over"],
+            "delegate": ["Find the named sub-agent", "Hand it the job", "Report what it made"],
+            "unknown": ["XON's local planner does not recognize this task yet. It handles: build an app, write code, fix "
+                        "failing tests, design a page, make an animation, critique, palette, and creating / asking sub-agents."],
         }[kind]
         return f"# Plan ({kind}, rules planner)\n\nTask: {task}\n\n" + "\n".join(f"{i + 1}. {s}" for i, s in enumerate(steps)) + "\n"
 
@@ -58,7 +71,10 @@ class RulesBackend:
         kind = self.classify(task)
         if kind != "unknown" or pretrained is None:
             return kind
-        choices = ["build_app", "write_code", "fix_tests", "design_page", "critique", "palette"]
+        pretrained = pretrained() if callable(pretrained) else pretrained  # only load the model when it is needed
+        if pretrained is None:
+            return kind
+        choices = ["build_app", "write_code", "fix_tests", "design_page", "animate", "critique", "palette"]
         reply = pretrained.chat([{"role": "user", "content": f"Task: {task}\nWhich ONE of these handles it best: {', '.join(choices)}, "
                                   "or none? Answer with just the name."}], max_new=8).strip().lower()
         return next((c for c in choices if c in reply), "unknown")
@@ -181,6 +197,43 @@ class RulesBackend:
                 "attempts": len(attempts),
                 "passed_on_attempt": attempts.index(True) + 1 if True in attempts else None, "repaired_by_fix": repaired,
                 "lint_issues": lint.get("count")}
+
+    def _animate(self, task, ws):
+        d = ws.rstrip("/")
+        words = [w for w in re.findall(r"[a-z]+", task.lower()) if w not in ("a", "an", "the", "make", "me", "animation", "animate",
+                                                                               "of", "with", "and", "create", "please", "on", "in")]
+        name = "-".join(words[:3]) or "animation"
+        r = yield "animate", {"prompt": task, "out": f"{d}/{name}"}
+        if not r.get("ok"):
+            return {"ok": False, "error": r.get("error"), "refused": r.get("refused", False)}
+        qc = r.get("check", {})
+        yield "think", {"note": f"subject {r['spec']['subject']}, motions {r['spec']['motions']}, {qc.get('frames')} frames, "
+                                f"moves={qc.get('moves')}, loop seam {qc.get('loop_seam')}, touches edge={qc.get('touches_edge')}"}
+        shot = yield "_screenshot", {"path": r["html"], "name": f"{name}.png"}
+        yield "git", {"action": "checkpoint", "arg": f"animation: {task[:60]}"}
+        return {"ok": bool(qc.get("moves")), "html": r["html"], "gif": r["gif"], "subject": r["spec"]["subject"],
+                "motions": r["spec"]["motions"], "count": r["spec"]["count"], "check": qc, "screenshot": shot.get("path")}
+
+    def _spawn_subagent(self, task, ws):
+        first = re.search(r"\b(?:,?\s*and (?:then )?(?:have|ask|tell|get|let) (?:it|them|him|her)(?: to)?|,?\s*then|and make it)\s+(.+)$", task, re.I)
+        spec_task = task[:first.start()] if first else task
+        r = yield "subagent", {"action": "create", "task": spec_task}
+        if not r.get("ok"):
+            return {"ok": False, "error": r.get("error")}
+        a = r["agent"]
+        out = {"ok": True, "created": a["id"], "name": a["name"], "role": a["role"], "tools": a["tools"],
+               "hint": f"give it work: xon subagent talk {a['id']} \"...\"  (or tell XON: ask {a['name']} to ...)"}
+        if first:
+            job = yield "subagent", {"action": "run", "id": a["id"], "message": first.group(1)}
+            out["first_job"] = {"reply": job.get("reply"), "files": job.get("files")}
+        return out
+
+    def _delegate(self, task, ws):
+        m = re.search(r"\b(?:ask|tell|have|let|get)\s+([\w-]+)\s+(?:to\s+)?(.+)$", task, re.I)
+        if not m:
+            return {"ok": False, "error": "who should do it? e.g. 'ask Pixel to make a spinning star'"}
+        r = yield "subagent", {"action": "run", "id": m.group(1), "message": m.group(2)}
+        return {"ok": r.get("ok", False), "agent": m.group(1), "reply": r.get("reply"), "files": r.get("files"), "error": r.get("error")}
 
     def _critique(self, task, ws):
         m = re.search(r"([\w./-]+\.(?:html|png|jpg))", task)

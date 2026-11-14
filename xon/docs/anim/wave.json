@@ -1,0 +1,14 @@
+{
+ "subject": "stickman",
+ "motions": [
+  "wave"
+ ],
+ "color": "#3e63dd",
+ "background": "#f4f2ee",
+ "count": 1,
+ "duration": 1.6,
+ "text": "",
+ "width": 480,
+ "height": 320,
+ "title": "a stick figure waving hello on a light background"
+}

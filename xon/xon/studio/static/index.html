@@ -68,6 +68,8 @@ iframe{width:100%;height:480px;border:1px solid var(--line);border-radius:10px;b
 .note{font-size:13px;color:var(--muted)}
 .banner{background:var(--accent-soft);border:1px solid var(--line);border-radius:10px;padding:8px 12px;font-size:13px;margin:0 20px}
 #menu{display:none}
+body.local .cloud{display:none!important}
+.sa-media{display:flex;flex-wrap:wrap;gap:8px;margin-top:6px}.sa-media img{max-width:100%;width:260px;border-radius:10px;border:1px solid var(--line)}
 .sa-list{display:flex;flex-wrap:wrap;gap:8px}.sa-list button{border-radius:999px;font-size:13px}.sa-list button[aria-pressed="true"]{background:var(--accent);color:var(--accent-ink);border-color:var(--accent)}
 .tools{display:flex;flex-wrap:wrap;gap:6px;margin:6px 0}.tool{font:12px ui-monospace,monospace;border:1px solid var(--line);border-radius:6px;padding:2px 8px;background:var(--bg)}
 .tool.denied{color:var(--muted);text-decoration:line-through}
@@ -96,13 +98,14 @@ header h1{font-size:16px;white-space:nowrap}.composer textarea{min-width:0}#menu
     <button data-view="agent"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 21c1-5 15-5 16 0"/></svg>Agent</button>
     <button data-view="subagents"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="8" cy="8" r="3"/><circle cx="17" cy="9" r="2.5"/><path d="M2 20c.8-4 11.2-4 12 0M14 19c.5-3 7-3 8 0"/></svg>Sub-agents</button>
     <button data-view="exhort"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="6" cy="6" r="2"/><circle cx="6" cy="18" r="2"/><circle cx="18" cy="12" r="2"/><path d="M8 6.8l8 4.4M8 17.2l8-4.4"/><path d="M15 3l2 2 3-3" /></svg>Exhort</button>
-    <button data-view="connect"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17a5 5 0 0 1 0-10h2M17 7a5 5 0 0 1 0 10h-2M8 12h8"/></svg>Connect</button>
+    <button class="cloud" data-view="connect"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M7 17a5 5 0 0 1 0-10h2M17 7a5 5 0 0 1 0 10h-2M8 12h8"/></svg>Connect</button>
     <button data-view="debug"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 9h6v8a3 3 0 0 1-6 0zM12 6V3M5 13H2M22 13h-3M6 7l2 2M18 7l-2 2M6 20l2-2M18 20l-2-2"/></svg>Debug</button>
   </nav>
   <div class="side-foot" id="status">
     <div><span class="dot" id="d-local"></span>Local model</div>
     <div><span class="dot" id="d-xon"></span>XON LM</div>
-    <div><span class="dot" id="d-cloud"></span>Cloud (Claude / OpenAI)</div>
+    <div class="cloud"><span class="dot" id="d-cloud"></span>Cloud (Claude / OpenAI)</div>
+    <div class="localtag"><span class="dot on"></span>Local only: no API keys</div>
     <button id="theme" aria-label="Toggle light or dark theme">Theme</button>
   </div>
 </aside>
@@ -114,8 +117,8 @@ header h1{font-size:16px;white-space:nowrap}.composer textarea{min-width:0}#menu
     <select id="model">
       <option value="local">Local: Qwen2.5-Coder 0.5B</option>
       <option value="xon">XON LM (trained here)</option>
-      <option value="anthropic">Cloud: Claude</option>
-      <option value="openai">Cloud: OpenAI-compatible</option>
+      <option class="cloud" value="anthropic">Cloud: Claude</option>
+      <option class="cloud" value="openai">Cloud: OpenAI-compatible</option>
     </select>
   </header>
   <div id="auth" class="banner" hidden>No access token. Open the exact URL printed by <code>xon studio</code> in the terminal.</div>
@@ -123,7 +126,7 @@ header h1{font-size:16px;white-space:nowrap}.composer textarea{min-width:0}#menu
   <section class="view on" id="chat-view" aria-label="Chat">
     <div id="msgs">
       <div class="empty" id="empty"><img src="/biscuit.svg" alt=""><h2>Hi, I'm Biscuit.</h2>
-        <p>This chat runs on your machine. Pick <b>Cloud: Claude</b> above (or press <b>Ask Claude</b>) when you need a bigger brain.</p>
+        <p>This chat runs on your machine with XON's own models. No API keys, nothing leaves this computer.</p>
         <div class="chips"><button data-ex="Write a Python function that checks if a string is a palindrome, with tests.">Python palindrome + tests</button>
           <button data-ex="Write a C++ function that returns the median of a vector<int>.">C++ median</button>
           <button data-ex="Explain what a KV-cache is in two sentences.">Explain KV-cache</button></div></div>
@@ -131,7 +134,7 @@ header h1{font-size:16px;white-space:nowrap}.composer textarea{min-width:0}#menu
     <div class="composer"><div class="row">
       <textarea id="input" rows="2" placeholder="Ask about code, Python, C++, CSS... (Enter to send, Shift+Enter for a new line)" aria-label="Message"></textarea>
       <button class="primary" id="send">Send</button><button id="stop" hidden>Stop</button>
-      <button id="askclaude" title="Send this conversation to Claude (needs a key in Connect)">Ask Claude</button>
+      <button class="cloud" id="askclaude" title="Send this conversation to Claude (needs a key in Connect)">Ask Claude</button>
     </div></div>
   </section>
 
@@ -171,10 +174,10 @@ header h1{font-size:16px;white-space:nowrap}.composer textarea{min-width:0}#menu
     <div class="grid2">
       <div class="card"><h2>Spawn a sub-agent</h2>
         <div class="form">
-          <label>What should it be?<textarea id="sa-task" rows="2">be a shopkeeper in my game named Greta</textarea></label>
+          <label>What should it be?<textarea id="sa-task" rows="2">a helper that makes animations</textarea></label>
           <div class="inline">
-            <label class="note">Tools<select id="sa-tk"><option value="demo">Demo town (shop, gate, quests)</option><option value="code">Code (run Python/C++, write code)</option><option value="json">My game (paste game_tools.json)</option></select></label>
-            <label class="note">Brain<select id="sa-brain"><option value="auto">auto</option><option value="rules">rules (offline)</option><option value="local">local voice</option><option value="cloud">cloud (Claude)</option></select></label>
+            <label class="note">Tools<select id="sa-tk"><option value="auto">Auto: XON picks the tools</option><option value="demo">Game character: demo town</option><option value="json">Game character: my game (game_tools.json)</option></select></label>
+            <label class="note">Brain<select id="sa-brain"><option value="rules">XON planner</option><option value="local">+ local model voice (characters)</option></select></label>
           </div>
           <label id="sa-json-wrap" hidden>game_tools.json<textarea id="sa-json" rows="5" placeholder='{"game": "My Game", "tools": [{"name": "shop_inventory", "description": "...", "params": {}, "http": {"url": "http://127.0.0.1:7777/npc/shop_inventory"}}]}'></textarea></label>
           <label>Withhold tools (optional, comma separated)<input id="sa-deny" placeholder="buy_from_player"></label>
@@ -184,10 +187,10 @@ header h1{font-size:16px;white-space:nowrap}.composer textarea{min-width:0}#menu
       </div>
       <div class="card"><h2 id="sa-title">Talk to it</h2>
         <div id="sa-tools" class="tools"></div>
-        <div id="sa-log"><p class="note">Spawn or pick a sub-agent, then talk to it as a player. Every tool it uses shows up here.</p></div>
+        <div id="sa-log"><p class="note">Spawn or pick a sub-agent, then give it a job (or talk to a game character as a player). Every tool it uses shows up here.</p></div>
         <div class="inline" style="margin-top:10px"><input id="sa-player" value="Ash" aria-label="Player name" style="width:90px"><input id="sa-msg" placeholder="what do you sell?" aria-label="Say" style="flex:1;min-width:140px"><button class="primary" id="sa-send">Say</button></div>
-        <div class="chips" style="justify-content:flex-start" id="sa-chips"><button>what do you sell?</button><button>how much is the iron sword?</button><button>I'll buy the iron sword for 80 gold</button><button>deal</button><button>sell you my iron sword</button><button>open the gate</button></div>
-        <h2 style="margin-top:14px">Game world</h2><div class="world" id="sa-world"><span class="note">-</span></div>
+        <div class="chips" style="justify-content:flex-start" id="sa-chips"></div>
+        <div id="sa-world-wrap" hidden><h2 style="margin-top:14px">Game world</h2><div class="world" id="sa-world"><span class="note">-</span></div></div>
       </div>
     </div>
   </section>
@@ -333,8 +336,15 @@ $('#agent-go').onclick = () => runJob($('#agent-task').value, $('#agent-job'), $
 
 // ---- sub-agents
 let SA = null, SA_TOOLS = [];
+const CHIPS = {animator: ['a red ball bouncing', 'a stick figure walking', 'a person waving hello on a light background', 'three yellow stars spinning slowly', 'loading dots in purple', "the word 'HELLO' floating in teal"],
+  designer: ['a pricing page for a bakery called Crumb with three plans', 'a dark landing page with three feature cards'],
+  coder: ['write a python function called is_prime with tests', 'implement binary search in C++'],
+  builder: ['build a todo app called Errands'], tester: ['fix the failing tests'],
+  shopkeeper: ['what do you sell?', 'how much is the iron sword?', "I'll buy the iron sword for 80 gold", 'deal', 'sell you my iron sword', 'open the gate'],
+  guard: ['open the gate because I have a delivery', 'close the gate'], questgiver: ['any work for me?']};
 $('#sa-tk').onchange = () => { $('#sa-json-wrap').hidden = $('#sa-tk').value !== 'json';
-  if ($('#sa-tk').value === 'code' && /shopkeeper/.test($('#sa-task').value)) $('#sa-task').value = 'a coding helper called Byte that runs my code'; };
+  if ($('#sa-tk').value === 'demo' && !/shop|guard|quest|inn|smith/i.test($('#sa-task').value)) $('#sa-task').value = 'be a shopkeeper in my game named Greta'; };
+const fileUrl = p => '/api/file?path=' + encodeURIComponent(p) + '&token=' + encodeURIComponent(TOKEN);
 async function saRefresh(select) {
   const r = await (await api('/api/subagents')).json(); const L = r.agents || [];
   $('#sa-list').innerHTML = L.length ? '' : '<span class="note">none yet</span>';
@@ -346,10 +356,11 @@ function saPick(a) { if (!a) return; SA = a; $('#sa-title').textContent = `Talk 
   $('#sa-tools').innerHTML = '<span class="note">can use:</span>' + (a.tools.length ? a.tools.map(t => `<span class="tool">${esc(t)}</span>`).join('') : '<span class="note">no tools</span>');
   $('#sa-log').innerHTML = `<p class="note">${esc(a.persona)}. Brain: ${esc(a.brain)}. Toolkit: ${esc(a.game)}.</p>`;
   document.querySelectorAll('#sa-list button').forEach(b => b.setAttribute('aria-pressed', String(b.textContent.startsWith(a.name + ' '))));
-  $('#sa-chips').hidden = a.toolkit !== 'demo'; }
+  $('#sa-chips').innerHTML = ''; (CHIPS[a.role] || []).forEach(c => { const b = document.createElement('button'); b.textContent = c; b.onclick = () => saSay(c); $('#sa-chips').append(b); });
+  $('#sa-world-wrap').hidden = a.toolkit !== 'demo'; $('#sa-player').hidden = a.kind === 'specialist'; $('#sa-msg').placeholder = a.kind === 'specialist' ? 'give ' + a.name + ' a job' : 'say something'; }
 $('#sa-go').onclick = async () => {
   const tk = $('#sa-tk').value === 'json' ? $('#sa-json').value : $('#sa-tk').value; $('#sa-note').textContent = 'spawning...';
-  const r = await (await api('/api/subagents', {task: $('#sa-task').value, toolkit: tk, brain: $('#sa-brain').value, deny: $('#sa-deny').value})).json();
+  const r = await (await api('/api/subagents', {task: $('#sa-task').value, toolkit: tk === 'auto' ? '' : tk, brain: $('#sa-brain').value, deny: $('#sa-deny').value})).json();
   if (!r.ok) { $('#sa-note').textContent = r.error; return; }
   $('#sa-note').textContent = `${r.agent.name} is a ${r.agent.role} with ${r.agent.tools.length} of ${r.tools.length} tools`; await saRefresh(r.agent.id);
   SA_TOOLS = r.tools.map(t => t.name); $('#sa-tools').innerHTML += SA_TOOLS.filter(t => !r.agent.tools.includes(t)).map(t => `<span class="tool denied" title="not granted">${esc(t)}</span>`).join('');
@@ -358,12 +369,15 @@ function saLine(who, text, me) { const d = document.createElement('div'); d.clas
   d.innerHTML = `<span class="who2">${esc(who)}</span><div class="say">${render(text)}</div>`; $('#sa-log').append(d); d.scrollIntoView({block: 'end'}); return d; }
 async function saSay(text) {
   if (!SA) { $('#sa-note').textContent = 'spawn or pick a sub-agent first'; return; } text = text.trim(); if (!text) return;
-  $('#sa-msg').value = ''; saLine($('#sa-player').value || 'player', text, true);
+  $('#sa-msg').value = ''; saLine(SA.kind === 'specialist' ? 'You' : ($('#sa-player').value || 'player'), text, true);
+  const wait = saLine(SA.name, '…');
   const r = await (await api('/api/subagents/talk', {id: SA.id, message: text, player: $('#sa-player').value || 'player'})).json();
-  if (r.error) { saLine('error', r.error); return; }
-  const d = saLine(`${r.name} · ${r.brain} · ${r.seconds}s`, r.reply);
+  wait.remove(); if (r.error) { saLine('error', r.error); return; }
+  const d = saLine(`${r.name} · ${r.seconds}s`, r.reply);
+  const media = (r.files || []).filter(f => /\.(gif|png)$/i.test(f) && !/alt\.png$/.test(f)).slice(0, 2), pages = (r.files || []).filter(f => /\.html$/i.test(f) && !/alt\.html$/.test(f));
+  if (media.length || pages.length) d.insertAdjacentHTML('beforeend', `<div class="sa-media">${media.map(f => `<img src="${fileUrl(f)}" alt="${esc(f)}">`).join('')}</div>${pages.map(f => `<a class="note" target="_blank" rel="noopener" href="${fileUrl(f)}">open ${esc(f.split('/').pop())}</a>`).join(' · ')}`);
   r.actions.forEach(a => { const res = a.result || {}; const st = res.denied ? '<span class="bad">DENIED</span>' : res.ok === false ? '<span class="bad">failed</span>' : '<span class="ok">ok</span>';
-    d.insertAdjacentHTML('beforeend', `<div class="act">↳ <b>${esc(a.tool)}</b>(${esc(Object.entries(a.args).map(([k, v]) => k + '=' + v).join(', '))}) ${st}${res.error ? ' · ' + esc(res.error) : ''}</div>`); });
+    d.insertAdjacentHTML('beforeend', `<div class="act">↳ <b>${esc(a.tool)}</b>(${esc(Object.entries(a.args).map(([k, v]) => k + '=' + String(v).slice(0, 60)).join(', '))}) ${st}${res.error ? ' · ' + esc(String(res.error).slice(0, 160)) : ''}</div>`); });
   if (r.world) { const p = r.world.player || {}; $('#sa-world').innerHTML = `<span class="note">${esc($('#sa-player').value)}'s gold</span><b>${p.gold ?? '-'}</b><span class="note">bag</span><span>${esc(Object.entries(p.bag || {}).map(([k, v]) => v + ' x ' + k).join(', ') || 'empty')}</span><span class="note">shop gold</span><span>${r.world.shop_gold}</span><span class="note">gate</span><span>${r.world.gate_open ? 'open' : 'closed'}</span><span class="note">last events</span><span>${esc(r.world.log.join(' · ') || '-')}</span>`; }
 }
 $('#sa-send').onclick = () => saSay($('#sa-msg').value);
@@ -394,7 +408,8 @@ $('#bundle').onclick = async () => { const r = await api('/api/debug-bundle'); c
   a.href = URL.createObjectURL(b); a.download = (r.headers.get('Content-Disposition') || '').split('filename=')[1]?.replace(/"/g, '') || 'xon-debug.zip'; a.click(); };
 async function refreshInfo() {
   const r = await api('/api/info'); if (r.status === 401) { $('#auth').hidden = false; return; }
-  const i = await r.json(); $('#info').textContent = JSON.stringify(i, null, 1); $('#ws').textContent = i.workspace; $('#mcp-cmd').textContent = i.mcp.claude_code;
+  const i = await r.json(); document.body.classList.toggle('local', !!i.local_only); if (i.local_only && ['anthropic', 'openai'].includes($('#model').value)) $('#model').value = 'local';
+  document.querySelector('.localtag').hidden = !i.local_only; $('#info').textContent = JSON.stringify(i, null, 1); $('#ws').textContent = i.workspace; $('#mcp-cmd').textContent = i.mcp.claude_code;
   $('#d-local').classList.toggle('on', i.models.local.loaded);
   $('#d-local').parentElement.lastChild.textContent = i.models.local.loaded ? 'Local model (ready)' : i.models.local.error ? 'Local model (off)' : 'Local model (loading...)'; $('#d-xon').classList.toggle('on', i.models.xon.available);
   $('#d-cloud').classList.toggle('on', i.models.anthropic.available || i.models.openai.available);

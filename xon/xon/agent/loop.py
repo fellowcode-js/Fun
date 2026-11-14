@@ -27,7 +27,7 @@ class Agent:
         a = self.cfg["agent"]
         self.perms = Permissions(mode or a["permission_mode"], allow_protected=allow_protected,
                                  allowlist=a.get("tool_allowlist") or None, assume_yes=assume_yes)
-        self.backend = pick(backend or a["backend"])
+        self.backend = pick(backend or a["backend"], self.cfg)
         self.tools = registry()
         self.max_steps = max_steps or a["max_steps"]
         self.hooks = a.get("hooks", {})
@@ -54,7 +54,7 @@ class Agent:
                  "ok": res.get("ok"), "error": res.get("error"), "ms": int((time.time() - t0) * 1000)})
         return res
 
-    def run(self, task: str, workspace: str = ".") -> dict:
+    def run(self, task: str, workspace: str = ".", kind: str | None = None) -> dict:
         tid = task_id(task)
         art = Artifacts(self.root, tid)
         ctx = Context(self.root, self.cfg, art)
@@ -69,7 +69,7 @@ class Agent:
                 summary = self._llm_loop(task, ctx, art, mem, failures)
                 steps = summary.pop("_steps", 0)
             else:
-                kind = self.backend.route(task, ctx.pretrained()) if hasattr(self.backend, "route") else None
+                kind = kind or (self.backend.route(task, ctx.pretrained) if hasattr(self.backend, "route") else None)
                 art.write("plan.md", self.backend.plan_text(task, kind))
                 gen = self.backend.recipe(task, workspace, kind)
                 res = None

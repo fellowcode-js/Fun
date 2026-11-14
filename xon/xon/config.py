@@ -15,7 +15,9 @@ except ModuleNotFoundError:  # pragma: no cover
     import tomli as tomllib  # type: ignore
 
 DEFAULTS: dict = {
-    "xon": {"tier": "A", "seed": 1337},
+    # local_only: XON never calls a cloud model or API key, even if one is set in the environment. Everything
+    # (planning, coding, sub-agents, chat) runs on this machine with XON's own and locally downloaded models.
+    "xon": {"tier": "A", "seed": 1337, "local_only": True},
     "paths": {
         "data": "data",
         "checkpoints": "checkpoints",

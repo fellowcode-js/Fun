@@ -1,35 +1,79 @@
-"""Sub-agents: XON spawns a role-playing agent from a one-line task and gives it only the tools that role needs.
+"""Sub-agents: XON spawns its own helpers for a task and gives each one only the tools it needs.
 
-  sa = create("be a shopkeeper in my game named Greta", toolkit="demo")      # or toolkit="game_tools.json"
-  sa.talk("hi, how much is the iron sword?", player="Ash")                  # -> reply + the tool calls it made
+Two kinds, both created from one line of text (by you, or by XON itself when you ask it for a helper):
 
-The task picks a role template (shopkeeper, blacksmith, innkeeper, guard, quest giver, coder, or a generic NPC),
-a name, a persona and rules, and grants the toolkit's tools that fit the role (override with allow= / deny=).
-A sub-agent can never call a tool it was not granted: Toolkit.call refuses it.
+  specialists  work for you inside XON, each in its own folder, by running XON's own agent loop restricted to
+               the specialty's tools: animator (animations), designer (pages / app screens), coder (Python, C++),
+               tester (fix failing tests), app builder, and a general helper for anything else.
+                 sa = create("a helper that makes animations")      ->  "Pixel", tools: animate, read, write, ...
+                 sa.talk("a red ball bouncing, slow")               ->  Pixel/anim/red-ball-bouncing.html + .gif
+  characters   live in a game and act through that game's tools (shopkeeper, blacksmith, innkeeper, guard, quest
+               giver, any NPC): create("be a shopkeeper in my game named Greta", toolkit="demo" | "game_tools.json")
 
-Brains (`brain=`):
-  cloud  Claude / OpenAI-compatible model with native tool calling (needs ANTHROPIC_API_KEY or OPENAI_API_KEY)
-  rules  deterministic role policy: parses the player's line, calls the tools, answers in character. Works offline,
-         never invents prices or items (everything comes from tool results).
-  local  rules decide the actions, XON's local coder model rewrites the line in the persona's voice
-  auto   cloud if a key is set, else rules
-Specs and per-player memory live in <root>/.xon/subagents/.
+Everything runs on this machine: no API keys, no cloud models. The thinking is XON's rules planner plus its local
+models; a character's line can optionally be re-voiced by the local model (brain="local").
+A sub-agent can never call a tool it was not granted (Permissions / Toolkit.call refuse it).
+Specs, memory and work folders live in <root>/.xon/subagents/ and <root>/subagents/<id>/.
 """
 from __future__ import annotations
 
 import difflib
 import hashlib
 import json
-import os
 import re
 import time
 from pathlib import Path
 
 from xon.game import Toolkit, ToolDenied, load_toolkit
 
+# specialists: kind = the XON recipe they run; tools = XON agent tools they may use
+SPECIALISTS: dict[str, dict] = {
+    "animator": {
+        "keywords": ["animation", "animations", "animate", "animator", "animating", "gif", "gifs", "motion", "cartoon",
+                     "loop", "loops", "keyframe", "keyframes", "sprite animation", "walk cycle"],
+        "kind": "animate", "tools": ["animate", "read", "write", "think", "view_image", "git"],
+        "names": ["Pixel", "Flip", "Loop", "Cel"],
+        "persona": "an animator who turns descriptions into looping animations (web page + GIF)",
+    },
+    "designer": {
+        "keywords": ["design", "designer", "designs", "page", "pages", "landing", "website", "ui", "screen", "screens",
+                     "layout", "layouts", "mockup", "interface"],
+        "kind": "design_page", "tools": ["design", "read", "write", "edit", "think", "shell", "view_image", "git"],
+        "names": ["Swatch", "Grid", "Kern"],
+        "persona": "a UI designer who builds accessible pages and checks contrast with math",
+    },
+    "coder": {
+        "keywords": ["coder", "programmer", "code", "coding", "developer", "python", "c++", "cpp", "script", "scripts",
+                     "function", "functions", "algorithm", "algorithms", "program", "programs"],
+        "kind": "write_code", "tools": ["codegen", "test", "cpp_build", "python_run", "fix", "lint", "read", "write", "edit",
+                                        "think", "git"],
+        "names": ["Byte", "Ada", "Lint"],
+        "persona": "a careful coder who writes code with tests and runs them before saying it works",
+    },
+    "tester": {
+        "keywords": ["tester", "debugger", "debug", "bug", "bugs", "failing", "tests", "qa", "fixer"],
+        "kind": "fix_tests", "tools": ["test", "fix", "read", "grep", "think", "git"],
+        "names": ["Probe", "Patch"],
+        "persona": "a bug hunter who localizes failing tests and verifies every fix",
+    },
+    "builder": {
+        "keywords": ["app", "apps", "builder", "todo", "tracker", "tool", "tools"],
+        "kind": "build_app", "tools": ["write", "read", "edit", "test", "design", "think", "git"],
+        "names": ["Forge", "Brick"],
+        "persona": "an app builder who scaffolds small web apps with tests",
+    },
+    "helper": {
+        "keywords": [],
+        "kind": None, "tools": ["read", "write", "edit", "glob", "grep", "think", "python_run"],
+        "names": ["Wren", "Tobin", "Lark"],
+        "persona": "a general helper",
+    },
+}
+
+# characters: act inside a game through its toolkit
 ROLES: dict[str, dict] = {
     "shopkeeper": {
-        "keywords": ["shopkeeper", "shop", "merchant", "vendor", "store", "trader", "seller", "sell", "market", "general store"],
+        "keywords": ["shopkeeper", "shop", "merchant", "vendor", "store", "trader", "seller", "market", "general store"],
         "tools": ["shop_inventory", "check_price", "player_wallet", "sell_to_player", "buy_from_player", "shop_restock"],
         "tool_words": ["shop", "price", "wallet", "sell", "buy", "inventory", "stock", "trade"],
         "names": ["Greta", "Odo", "Marla", "Pim", "Hollis", "Tamsin", "Bram"],
@@ -38,7 +82,7 @@ ROLES: dict[str, dict] = {
                   "Haggle a little: accept offers of at least 85% of list price, otherwise counter at 92%."],
     },
     "blacksmith": {
-        "keywords": ["blacksmith", "smith", "forge", "armorer", "weaponsmith"],
+        "keywords": ["blacksmith", "smith", "forge master", "armorer", "weaponsmith"],
         "tools": ["shop_inventory", "check_price", "player_wallet", "sell_to_player", "buy_from_player", "shop_restock"],
         "tool_words": ["shop", "price", "wallet", "sell", "buy", "repair", "forge"],
         "names": ["Durgan", "Helka", "Ivo"],
@@ -69,17 +113,8 @@ ROLES: dict[str, dict] = {
         "persona": "a village elder who hands out quests for gold",
         "rules": ["Give each player at most one open quest at a time."],
     },
-    "coder": {
-        "keywords": ["coder", "programmer", "code", "coding", "developer", "debug", "reviewer", "python", "c++", "script"],
-        "tools": ["python_run", "cpp_run", "write_code"],
-        "tool_words": ["run", "code", "test", "compile"],
-        "names": ["Byte", "Ada", "Lint"],
-        "persona": "a careful coding helper that runs code before claiming it works",
-        "rules": ["Run code in the sandbox before saying it works.", "Show the output."],
-        "toolkit": "code",
-    },
     "npc": {
-        "keywords": [],
+        "keywords": ["npc", "villager", "townsperson", "character"],
         "tools": [],
         "tool_words": [],
         "names": ["Wren", "Tobin", "Lark"],
@@ -87,24 +122,39 @@ ROLES: dict[str, dict] = {
         "rules": ["Stay in character."],
     },
 }
+GAME_WORDS = r"\b(game|npc|player|players|rpg|village|town|tavern|quest|in-game|shopkeeper|merchant|guard|blacksmith|innkeeper)\b"
 
 
-def pick_role(task: str) -> str:
+def _score(task: str, words: list[str]) -> int:
     t = task.lower()
-    best, score = "npc", 0
+    return sum(2 if re.search(rf"(?<![\w]){re.escape(k)}(?![\w])", t) else 0 for k in words)
+
+
+def pick_role(task: str, toolkit=None) -> str:
+    """Character role if the task is about a game (or a game toolkit was given), otherwise a specialist."""
+    game = toolkit not in (None, "", "code") or re.search(GAME_WORDS, task.lower())
+    best, score = None, 0
     for role, r in ROLES.items():
-        s = sum(2 if re.search(rf"\b{re.escape(k)}\b", t) else 0 for k in r["keywords"])
-        s += 1 if role in t else 0
-        if s > score:
-            best, score = role, s
-    return best
+        sc = _score(task, r["keywords"]) + (1 if game else -1)
+        if sc > score:
+            best, score = role, sc
+    if best and (game or score >= 2) and best != "npc":
+        return best
+    sbest, sscore = "helper", 0
+    for role, r in SPECIALISTS.items():
+        sc = _score(task, r["keywords"])
+        if sc > sscore:
+            sbest, sscore = role, sc
+    if game and sscore == 0:
+        return best or "npc"
+    return sbest
 
 
 def pick_name(task: str, role: str) -> str:
-    m = re.search(r"\b(?:named|called|name is|name him|name her|name them)\s+([A-Z][\w'-]*(?:\s+[A-Z][\w'-]*)?)", task)
+    m = re.search(r"\b(?:named|called|name is|name him|name her|name them|name it)\s+([A-Z][\w'-]*(?:\s+[A-Z][\w'-]*)?)", task)
     if m:
         return m.group(1)
-    names = ROLES[role]["names"]
+    names = (ROLES.get(role) or SPECIALISTS[role])["names"]
     return names[int(hashlib.sha1(task.encode()).hexdigest(), 16) % len(names)]
 
 
@@ -121,6 +171,18 @@ def grant_tools(role: str, tk: Toolkit, allow: list[str] | None = None, deny: li
     return [n for n in got if n not in (deny or [])]
 
 
+def grant_xon_tools(role: str, task: str, allow: list[str] | None = None, deny: list[str] | None = None) -> list[str]:
+    """Specialty tools, plus any XON tool whose name the task mentions (e.g. 'a helper that can use sqlite')."""
+    from xon.agent.tools import MODULES
+    got = list(SPECIALISTS[role]["tools"])
+    tl = task.lower()
+    for n in MODULES:
+        if n not in got and n not in ("subagent", "shell") and re.search(rf"\b{n}\b", tl):
+            got.append(n)
+    got += [n for n in (allow or []) if n in MODULES and n not in got]
+    return [n for n in got if n not in (deny or []) and n != "subagent"]  # sub-agents don't spawn sub-agents
+
+
 def _slug(s: str) -> str:
     return re.sub(r"[^a-z0-9]+", "-", s.lower()).strip("-") or "agent"
 
@@ -132,25 +194,28 @@ def _store(root: Path) -> Path:
 
 
 def create(task: str, toolkit: str | dict | None = None, *, name: str | None = None, role: str | None = None,
-           allow: list[str] | None = None, deny: list[str] | None = None, brain: str = "auto",
+           allow: list[str] | None = None, deny: list[str] | None = None, brain: str = "rules",
            root: Path | str = ".") -> "SubAgent":
     root = Path(root)
-    role = role if role in ROLES else pick_role(task)
-    if toolkit in (None, "") and ROLES[role].get("toolkit"):
-        toolkit = ROLES[role]["toolkit"]
-    toolkit = toolkit or "demo"
-    tk = load_toolkit(toolkit, root)
+    role = role if role in ROLES or role in SPECIALISTS else pick_role(task, toolkit)
     name = name or pick_name(task, role)
-    spec = {
-        "id": _slug(name), "name": name, "role": role, "task": task,
-        "persona": f"{name}, {ROLES[role]['persona']}",
-        "rules": ROLES[role]["rules"], "tools": grant_tools(role, tk, allow, deny),
-        "toolkit": toolkit if isinstance(toolkit, str) else "inline", "game": tk.game,
-        "brain": brain, "created": time.time(),
-    }
-    if isinstance(toolkit, dict):
-        (_store(root) / f"{spec['id']}.toolkit.json").write_text(json.dumps(toolkit, indent=1))
-        spec["toolkit"] = str(_store(root) / f"{spec['id']}.toolkit.json")
+    spec = {"id": _slug(name), "name": name, "role": role, "task": task, "brain": "local" if brain == "local" else "rules",
+            "created": time.time()}
+    if role in SPECIALISTS:
+        sp = SPECIALISTS[role]
+        spec.update({"kind": "specialist", "recipe": sp["kind"], "persona": f"{name}, {sp['persona']}",
+                     "tools": grant_xon_tools(role, task, allow, deny), "toolkit": "xon", "game": "XON",
+                     "workdir": f"subagents/{_slug(name)}"})
+        tk = None
+    else:
+        toolkit = toolkit or "demo"
+        tk = load_toolkit(toolkit, root)
+        spec.update({"kind": "character", "persona": f"{name}, {ROLES[role]['persona']}", "rules": ROLES[role]["rules"],
+                     "tools": grant_tools(role, tk, allow, deny), "toolkit": toolkit if isinstance(toolkit, str) else "inline",
+                     "game": tk.game})
+        if not isinstance(toolkit, str) and toolkit is not None:
+            (_store(root) / f"{spec['id']}.toolkit.json").write_text(json.dumps(toolkit, indent=1))
+            spec["toolkit"] = str(_store(root) / f"{spec['id']}.toolkit.json")
     (_store(root) / f"{spec['id']}.json").write_text(json.dumps(spec, indent=1))
     return SubAgent(spec, root, tk)
 
@@ -161,7 +226,8 @@ def load(agent_id: str, root: Path | str = ".") -> "SubAgent":
     if not p.exists():
         raise KeyError(f"no sub-agent '{agent_id}' (see `xon subagent list`)")
     spec = json.loads(p.read_text())
-    return SubAgent(spec, root, load_toolkit(spec["toolkit"], root))
+    tk = None if spec.get("kind") == "specialist" else load_toolkit(spec["toolkit"], root)
+    return SubAgent(spec, root, tk)
 
 
 def list_all(root: Path | str = ".") -> list[dict]:
@@ -183,7 +249,7 @@ def remove(agent_id: str, root: Path | str = ".") -> bool:
 # ------------------------------------------------------------------------------------------------ the agent
 
 class SubAgent:
-    def __init__(self, spec: dict, root: Path, toolkit: Toolkit):
+    def __init__(self, spec: dict, root: Path, toolkit: Toolkit | None):
         self.spec, self.root, self.tk = spec, Path(root), toolkit
         self._mem_path = _store(self.root) / f"{spec['id']}.memory.json"
         self.memory: dict = json.loads(self._mem_path.read_text()) if self._mem_path.exists() else {}
@@ -192,13 +258,9 @@ class SubAgent:
     def name(self) -> str:
         return self.spec["name"]
 
-    def system_prompt(self) -> str:
-        s = self.spec
-        return (f"You are {s['persona']} in the game '{s['game']}'. Your job: {s['task']}\n"
-                f"Rules:\n- " + "\n- ".join(s["rules"]) +
-                "\n- Stay in character; reply in one to three short sentences of spoken dialogue."
-                "\n- Use your tools for every fact about the game world (prices, stock, gold). Never invent them."
-                "\n- If something needs a tool you do not have, say you can't help with that.")
+    @property
+    def is_specialist(self) -> bool:
+        return self.spec.get("kind") == "specialist"
 
     def call(self, tool: str, args: dict, actions: list) -> dict:
         try:
@@ -214,53 +276,107 @@ class SubAgent:
         self._mem_path.write_text(json.dumps(self.memory, indent=1))
 
     def brain(self) -> str:
-        b = self.spec.get("brain", "auto")
-        if b == "auto":
-            return "cloud" if (os.environ.get("ANTHROPIC_API_KEY") or os.environ.get("XON_OPENAI_KEY")
-                               or os.environ.get("OPENAI_API_KEY")) else "rules"
-        return b
+        return self.spec.get("brain", "rules")
 
-    def talk(self, message: str, player: str = "player", brain: str | None = None, backend=None, voice=None) -> dict:
-        """One line from a player -> {reply, actions, brain}. `backend`/`voice` let tests inject fakes."""
+    def talk(self, message: str, player: str = "player", brain: str | None = None, voice=None) -> dict:
+        """A job (specialist) or a line from a player (character) -> {reply, actions, files, brain}."""
         t0 = time.time()
-        b = brain or ("cloud" if backend is not None else self.brain())
+        b = brain or self.brain()
+        if b not in ("rules", "local"):
+            b = "rules"
         actions: list[dict] = []
-        if b == "cloud":
-            try:
-                reply = self._cloud(message, player, actions, backend)
-            except Exception as e:  # network/key problems: stay playable
-                reply = self._rules(message, player, actions)
-                b = f"rules (cloud failed: {type(e).__name__})"
+        files: list[str] = []
+        ok = True
+        if self.is_specialist:
+            reply, files, ok = self._work(message, actions)
         else:
             reply = self._rules(message, player, actions)
             if b == "local":
                 reply = self._voice(reply, message, voice) or reply
         self._remember(player, message, reply, actions)
-        return {"agent": self.spec["id"], "name": self.name, "reply": reply, "actions": actions, "brain": b,
-                "seconds": round(time.time() - t0, 2)}
+        return {"agent": self.spec["id"], "name": self.name, "ok": ok, "reply": reply, "actions": actions, "files": files,
+                "brain": b, "seconds": round(time.time() - t0, 2)}
 
-    # ---- cloud brain: native tool calling
-    def _cloud(self, message: str, player: str, actions: list, backend=None) -> str:
-        if backend is None:
-            from xon.agent.backends import pick
-            backend = pick("auto")
-            if not hasattr(backend, "chat"):
-                raise RuntimeError("no cloud key")
-        hist = self.memory.get(player, {}).get("turns", [])[-6:]
-        msgs = [{"role": "system", "content": self.system_prompt() + f"\nThe player talking to you is '{player}'."}]
-        for t in hist:
-            msgs += [{"role": "user", "content": t["player"]}, {"role": "assistant", "content": t["npc"]}]
-        msgs.append({"role": "user", "content": message})
-        specs = self.tk.specs(self.spec["tools"])
-        for _ in range(6):
-            r = backend.chat(msgs, tools=specs)
-            if not r.get("tool_calls"):
-                return (r.get("content") or "...").strip()
-            results = [(c, self.call(c["name"], c.get("args") or {}, actions)) for c in r["tool_calls"]]
-            msgs += backend.tool_result_messages(r, results)
-        return "Give me a moment, I lost my train of thought."
+    # ---- specialists: XON's own agent loop, in the sub-agent's folder, limited to its tools
+    def _work(self, message: str, actions: list) -> tuple[str, list[str], bool]:
+        from xon import config
+        from xon.agent.backends.rules import RulesBackend
+        from xon.agent.loop import Agent
+        from xon.agent.permissions import Permissions
+        work = self.root / self.spec["workdir"]
+        work.mkdir(parents=True, exist_ok=True)
+        block = re.search(r"```(\w*)\n(.*?)```", message, re.S)
+        if block and "python_run" in self.spec["tools"] and block.group(1).lower() in ("", "py", "python"):
+            from xon.agent.tools import Context, registry
+            r = registry()["python_run"].run(Context(work, config.load(self.root)), code=block.group(2))
+            actions.append({"tool": "python_run", "args": {"code": block.group(2)[:200]}, "result": {"ok": r.get("ok")}})
+            out = (r.get("stdout") or "") + (r.get("stderr") or "")
+            return (f"{'It ran fine' if r.get('ok') else 'It failed'}. Output:\n```\n{out.strip()[-1500:] or '(no output)'}\n```",
+                    [], bool(r.get("ok")))
+        cfg = config.load(self.root)
+        if not (self.root / "xon.toml").exists():  # a workspace inside XON: reuse XON's models and checkpoints
+            home = config.load()
+            for k in ("checkpoints", "evalsets"):
+                cfg["paths"][k] = str(config.path(home, k))
+            cfg["lm"] = home["lm"]
+        ag = Agent(work, cfg, mode="auto-edit", backend="rules", assume_yes=True, max_steps=40)
+        ag.perms = Permissions("auto-edit", allowlist=self.spec["tools"], assume_yes=True)
+        kind = RulesBackend().classify(message)
+        recipe = self.spec.get("recipe")
+        allowed = {recipe} if recipe else set()
+        allowed |= {"critique", "palette"} if recipe in ("design_page", "build_app") else set()
+        if recipe is None:  # general helper: whatever the planner recognizes, minus spawning more agents
+            kind = kind if kind not in ("spawn_subagent", "delegate") else "unknown"
+        elif kind not in allowed:
+            kind = recipe  # a specialist reads every job as its specialty
+        before = {p for p in work.rglob("*") if p.is_file()}
+        summary = ag.run(message, ".", kind=kind)
+        art = work / summary.get("artifacts", "")
+        if (art / "log.jsonl").exists():
+            for line in (art / "log.jsonl").read_text().splitlines():
+                st = json.loads(line)
+                actions.append({"tool": st["tool"], "args": {k: v for k, v in (st.get("args") or {}).items() if k != "content"},
+                                "result": {"ok": st.get("ok"), "error": st.get("error"),
+                                           "denied": "not in xon.toml agent.tool_allowlist" in str(st.get("error") or "")}})
+        new = sorted(str(p.relative_to(self.root)) for p in work.rglob("*") if p.is_file() and p not in before
+                     and ".git" not in p.parts and "artifacts" not in p.parts)
+        ok = not summary.get("error") and summary.get("ok", True) is not False and not summary.get("stopped")
+        return self._report(kind, summary, new, ok), new, ok
 
-    # ---- local voice: rules decide, the local model rephrases (facts are kept: numbers must survive)
+    def _report(self, kind: str, s: dict, files: list[str], ok: bool) -> str:
+        if s.get("refused") or (s.get("error") and "won't" in str(s.get("error"))):
+            return f"I can't do that one: {s.get('error')}"
+        if not ok:
+            return f"That didn't work: {s.get('error') or s.get('stopped') or 'see the log'}."
+        if kind == "animate":
+            c = s.get("check", {})
+            verbs = {"bounce": "bounces", "jump": "jumps", "spin": "spins", "pulse": "pulses", "slide": "slides", "float": "floats",
+                     "orbit": "orbits", "shake": "shakes", "fade": "fades", "grow": "grows", "walk": "walks", "run": "runs",
+                     "wave": "waves"}
+            subj = {"stickman": "stick figure", "dots": "set of loading dots"}.get(s.get("subject"), s.get("subject"))
+            n = (s.get("check") or {}).get("count") or s.get("count") or 1
+            what = f"a {subj} that {' and '.join(verbs.get(m, m) for m in s.get('motions', []))}" if n == 1 or s.get("subject") == "dots" \
+                else f"{n} {subj}s that {' and '.join(verbs.get(m, m).rstrip('s') if not m.endswith('s') else m for m in s.get('motions', []))}"
+            return (f"Done: {what}, {c.get('frames')} frames, "
+                    f"checked that it moves{'' if not c.get('touches_edge') else ' (it touches the edge)'}. "
+                    f"Files: {s.get('html')} and {s.get('gif')}.")
+        if kind == "design_page":
+            keep = [f for f in files if not re.search(r"/alt\.(html|png)$", f)]
+            return f"Designed it; design check score {s.get('critique_after')}/100. Files: {', '.join(keep[:4])}."
+        if kind == "write_code":
+            return (f"Wrote {s.get('file')}; tests {'passed' if s.get('ok') else 'failed'}"
+                    f"{' on attempt ' + str(s.get('passed_on_attempt')) if s.get('passed_on_attempt') else ''}"
+                    f"{' (tests written by the model: review them)' if s.get('warning') else ''}.")
+        if kind == "fix_tests":
+            return f"{'Fixed' if s.get('fixed') else 'Could not fix'} {s.get('file') or 'the failing tests'}."
+        if kind == "build_app":
+            return f"Built it; tests {'pass' if s.get('tests_after') else 'fail'}, critique {s.get('critique_after')}. Files: {', '.join(files[:5])}."
+        if kind == "unknown":
+            return ("I don't know how to do that yet. I can: make animations, design pages, write code, fix tests, build "
+                    "small apps.")
+        return f"Done. Files: {', '.join(files[:6]) or '(none)'}."
+
+    # ---- local voice for characters: rules decide, the local model rephrases (numbers must survive)
     def _voice(self, line: str, message: str, voice=None) -> str | None:
         try:
             if voice is None:
@@ -279,7 +395,6 @@ class SubAgent:
             return None
         return None
 
-    # ---- rules brain
     def _rules(self, message: str, player: str, actions: list) -> str:
         role = self.spec["role"]
         if role in ("shopkeeper", "blacksmith", "innkeeper"):
@@ -288,11 +403,9 @@ class SubAgent:
             return _guard_policy(self, message, player, actions)
         if role == "questgiver":
             return _quest_policy(self, message, player, actions)
-        if role == "coder":
-            return _coder_policy(self, message, player, actions)
         if re.search(r"\b(hi|hello|hey|greetings)\b", message.lower()):
             return f"Hello there, I'm {self.name}."
-        return f"I'm {self.name}. I don't have a brain for that without a cloud model (set ANTHROPIC_API_KEY)."
+        return f"I'm {self.name}. Give me a game tool to work with and I'll use it."
 
 
 _NUMS = {"a": 1, "an": 1, "one": 1, "two": 2, "three": 3, "four": 4, "five": 5, "six": 6, "seven": 7, "eight": 8,
@@ -446,24 +559,3 @@ def _quest_policy(sa: SubAgent, msg: str, player: str, actions: list) -> str:
         return ("Rats have taken the old cellar. Clear them out and 40 gold is yours." if r.get("ok")
                 else f"Not now: {r.get('error')}.")
     return f"Greetings, traveller. I'm {sa.name}. Looking for work?"
-
-
-def _coder_policy(sa: SubAgent, msg: str, player: str, actions: list) -> str:
-    block = re.search(r"```(\w*)\n(.*?)```", msg, re.S)
-    if block:
-        lang = block.group(1).lower()
-        tool = "cpp_run" if lang in ("cpp", "c++", "cc") else "python_run"
-        r = sa.call(tool, {"code": block.group(2)}, actions)
-        out = (r.get("stdout") or "") + (r.get("stderr") or "")
-        return f"{'It ran fine' if r.get('ok') else 'It failed'}. Output:\n```\n{out.strip()[-1500:] or '(no output)'}\n```"
-    if re.search(r"\b(write|make|create|implement|code)\b", msg.lower()):
-        lang = "cpp" if re.search(r"c\+\+|\bcpp\b", msg.lower()) else "python"
-        r = sa.call("write_code", {"task": msg, "lang": lang}, actions)
-        if not r.get("ok"):
-            return f"I can't write code right now: {r.get('error')}."
-        verdict = {True: "I ran it and the tests passed", False: "I ran it and the tests FAILED",
-                   None: "it has no tests, so I could not check it"}[r.get("tests_passed")]
-        out = (r.get("test_output") or "").strip()
-        return (f"Here it is ({verdict}):\n```{lang}\n{r['code'].strip()}\n```" +
-                (f"\nOutput:\n```\n{out[-800:]}\n```" if out else ""))
-    return f"I'm {sa.name}. Paste code in a ``` block and I'll run it, or ask me to write something."

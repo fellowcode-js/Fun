@@ -88,9 +88,6 @@ def load_toolkit(src: str | Path | dict | None, root: Path | None = None) -> Too
     """"demo" (built-in shop game), a path to game_tools.json, or an already-parsed dict."""
     if src in (None, "", "demo"):
         return DemoGame.shared(root).toolkit()
-    if src == "code":
-        from xon.game.code_tools import toolkit as code_toolkit
-        return code_toolkit(root)
     d = src if isinstance(src, dict) else json.loads(Path(src).read_text())
     tools = []
     for t in d.get("tools", []):

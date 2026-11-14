@@ -193,9 +193,15 @@ third-party model license. Trained checkpoints are **not** shipped in the zip.
 | Exhort on the healthy trained XON LM (3 seeds) | ties with 60 extra plain training steps (5.529 vs 5.530); no dead/broken neurons to fix |
 | Exhort inside `xon train --quick` | 24 of 1024 neurons reborn, kept (val 5.704 -> 5.697) |
 | Shopkeeper sub-agent, rules brain | list, price, buy, haggle -> counter -> "deal", buy-back, wallet; every number from a tool call |
-| Tool permission scoping | shopkeeper offered only its 6 tools; a cloud brain asking for open_gate is denied |
+| Tool permission scoping | shopkeeper granted only its 6 tools; calling open_gate is denied |
 | Local coder in Studio chat (Fibonacci) | correct function, but its own test asserted fib(30) == 896 (true: 832040); Run caught it |
 | Coder sub-agent (is_prime on 1, 2, 17, 21) | wrote code + tests, ran them in the sandbox: 4/4 passed |
+
+| XON spawns a sub-agent from a prompt + first job ("...animations named Pixel and have it make a red ball bouncing") | animator with 6 tools, ball .html + .gif made, 3.3 s, no model or network |
+| Delegation ("ask Loop to make a stick figure waving") | done, files in its own folder; unknown name -> lists who exists |
+| Designer helper (bakery pricing page) | page made and critiqued, 37 s on CPU |
+| Animation engine self-check (10 subject/motion combos, test suite) | all move, none leave the stage |
+| Local only with ANTHROPIC_API_KEY / OPENAI_API_KEY set | still the local rules planner; Studio cloud endpoint returns 403 |
 
 Details: [docs/exhort.md](docs/exhort.md), [docs/subagents.md](docs/subagents.md).
 

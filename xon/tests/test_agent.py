@@ -112,7 +112,9 @@ def test_agent_builds_todo_app(tmp_path, home):
 
 
 def test_llm_backend_tool_loop_with_fake_openai_server(tmp_path, home, monkeypatch):
-    """Exercise the OpenAI-compatible tool-calling loop against a local fake server (no real API key needed)."""
+    """Exercise the OpenAI-compatible tool-calling loop against a local fake server (no real API key needed).
+    This path only exists when the user explicitly turns local-only off."""
+    monkeypatch.setenv("XON_LOCAL_ONLY", "0")
     import json
     import threading
     from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer

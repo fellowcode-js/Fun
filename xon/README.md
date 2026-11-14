@@ -74,19 +74,24 @@ patch, think (scratchpad), docs_search (BM25 over crawled licensed docs/code), c
 attempt 1, task examples become authoritative asserts), then repair. Design = best of two engines, then
 critique → fix rounds until the score stops improving. Unknown tasks are routed by the local model.
 
-Brain: an external chat endpoint is used for planning when `ANTHROPIC_API_KEY` or `XON_OPENAI_KEY`/`OPENAI_API_KEY`
-(+`XON_OPENAI_BASE` for any OpenAI-compatible server) is set; otherwise a deterministic **rules planner** handles the
-core task shapes (build app, fix tests, design/critique page) and says so for anything else. The local XON LM does
+Brain: XON is **local only** by default: a deterministic **rules planner** handles the task shapes it knows (build
+app, write code, fix tests, design/critique a page, make an animation, create or ask sub-agents) and says so for
+anything else. (Setting `local_only = false` in `xon.toml` re-enables the optional external chat endpoints.) The local XON LM does
 completion (`xon complete`) and ranks repair candidates.
 
-## Sub-agents (NPCs and helpers)
+## Sub-agents (XON makes its own helpers)
 ```bash
-xon subagent new "be a shopkeeper in my game named Greta"     # role, name, persona and tools picked from the task
-xon subagent talk greta --player Ash                           # it sells, haggles, buys back, through real tool calls
-xon subagent new "be the shopkeeper of Riverbend" --toolkit game_tools.json   # your game's own tools (HTTP/Python)
+xon agent "make a sub-agent that makes animations named Pixel and have it make a red ball bouncing"
+xon agent "ask Pixel to make a stick figure waving hello"          # -> .html + .gif in subagents/pixel/
+xon agent "create a helper that designs pages, then a pricing page for a bakery"
+xon subagent new "be a shopkeeper in my game named Greta"          # game characters use your game's tools
 ```
-A sub-agent only gets the tools its role needs (the shopkeeper cannot open the town gate). Brains: offline rules,
-local voice, or Claude with tool calling. Details: [docs/subagents.md](docs/subagents.md).
+XON picks the specialty (animator, designer, coder, tester, app builder, general helper, or a game character),
+grants only the tools it needs and gives it its own folder. Details: [docs/subagents.md](docs/subagents.md).
+
+## Local only (no API keys)
+`local_only = true` (default): XON never calls a cloud model or uses an API key. Planning is XON's own rules
+planner, chat and code use the local model, animations come from XON's own engine.
 
 ## Exhort (neuron reincarnation)
 ```bash
