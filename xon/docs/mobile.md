@@ -21,6 +21,16 @@ network use is downloading the coder model once (Wi-Fi recommended).
 
 Needs the desktop version: training the XON LM, Exhort, C++ (phones have no compiler), design critique.
 
+## Ollama key (one step)
+Speed tab > **Ollama key** > paste your key from ollama.com (Settings > Keys) > **Use key** (pasting is enough).
+XON checks the key with Ollama, picks the best cloud model the key can use (gpt-oss:120b first), and switches chat
+and sub-agents to it. Nothing else to set up. A wrong key is refused with a message. The key stays on the phone.
+
+## Sub-agents and XON's model
+Sub-agents think with **XON's model** (on the phone) by default, through XON's loop: write the files, add its own
+asserts to code, run in its own sandbox, fix from the error (3 tries, more sampling each try). "Sub-agents think
+with: API" runs the same loop on Ollama/your server. Coding helpers use this loop too now.
+
 ## API brain (optional, off by default)
 Speed tab > Brain > **API**. Pick **Ollama** (address like `http://192.168.1.10:11434`, model like `llama3.2`) or any
 **OpenAI-compatible** server (LM Studio, llama.cpp server, etc., address ending in `/v1`, optional key). Tap **Test

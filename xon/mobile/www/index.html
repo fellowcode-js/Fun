@@ -84,9 +84,17 @@ nav button[aria-current="page"]{color:var(--accent);font-weight:650}nav svg{widt
 
   <section class="view" id="v-speed" aria-label="Speed">
     <div class="scroll">
+      <div class="card"><h2>Ollama key</h2>
+        <p class="note">Paste your Ollama API key (ollama.com → Settings → Keys). That's all: XON checks it, picks the best model, and runs chat and sub-agents on Ollama's servers. Much faster, and the phone stays cool.</p>
+        <div class="row"><input id="ollama-key" type="password" autocomplete="off" placeholder="paste key here" aria-label="Ollama API key" style="flex:1;width:auto"><button class="primary" id="key-go">Use key</button></div>
+        <p class="note" id="key-out"></p>
+      </div>
       <div class="card"><h2>Brain</h2>
         <div class="seg" id="brain"><button data-v="phone">On this phone</button><button data-v="api">API</button></div>
         <p class="note">API runs the thinking on another machine (Ollama on your PC, LM Studio, any OpenAI-compatible server): faster, and the phone stays cool. Off by default.</p>
+        <h2 style="margin-top:14px">Sub-agents think with</h2>
+        <div class="seg" id="sub"><button data-v="xon">XON (on phone)</button><button data-v="api">API</button></div>
+        <p class="note">XON runs XON's own model with its test-and-fix loop. API runs the same loop on the faster server.</p>
         <div id="api-card" hidden>
           <div class="seg" id="apikind"><button data-v="ollama">Ollama</button><button data-v="openai">OpenAI-compatible</button></div>
           <label class="note">Address<input id="api-url" inputmode="url" autocapitalize="off" spellcheck="false"></label>

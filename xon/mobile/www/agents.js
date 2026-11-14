@@ -5,8 +5,7 @@ import * as A from './animate.js';
 export const SPECIALISTS = {
   animator: {kw: ['animation', 'animations', 'animate', 'animator', 'gif', 'gifs', 'motion', 'cartoon', 'loop', 'loops'],
     tools: ['animate', 'save_gif'], names: ['Pixel', 'Flip', 'Loop', 'Cel'], persona: 'an animator who turns descriptions into looping animations'},
-  coder: {kw: ['coder', 'programmer', 'code', 'coding', 'developer', 'python', 'script', 'function', 'functions', 'algorithm', 'program'],
-    tools: ['write_code', 'python_run'], names: ['Byte', 'Ada', 'Lint'], persona: 'a careful coder who runs the tests before saying it works'},
+  // coders are custom specialists now: they use the same XON test-and-fix loop as every other sub-agent
 };
 export const ROLES = {
   shopkeeper: {kw: ['shopkeeper', 'shop', 'merchant', 'vendor', 'store', 'trader', 'seller', 'market'], names: ['Greta', 'Odo', 'Marla', 'Pim'],
@@ -142,40 +141,95 @@ async function coder(agent, msg, call, ctx) {
 }
 
 // Custom specialist: thinks in its role, writes its work into its own sandbox, runs Python it wrote, fixes it once.
+// Custom specialist, run on XON's model with XON's thinking loop: do the job in its own sandbox, write files,
+// test what it wrote (it adds its own asserts to code), and on failure fix it from the error (up to 3 tries,
+// sampling a little more each time). Written to work with the small on-phone model, not only big API models.
+const EXT = {python: 'py', py: 'py', obj: 'obj', js: 'js', javascript: 'js', html: 'html', json: 'json', md: 'md', markdown: 'md', svg: 'svg', cpp: 'cpp', 'c++': 'cpp', csv: 'csv', txt: 'txt', text: 'txt', css: 'css', yaml: 'yaml', xml: 'xml'};
+const FILE_RX = /FILE:\s*`?([\w./ -]+?)`?\s*\n+```[\w+-]*\n([\s\S]*?)```/g;
+function extractFiles(text) {
+  const out = [...text.matchAll(FILE_RX)].map(m => [m[1].trim(), m[2]]);
+  if (out.length) return out;
+  const blocks = [...text.matchAll(/```([\w+-]*)\n([\s\S]*?)```/g)];  // small models often skip the FILE: line
+  const py = blocks.filter(b => /^(py|python)?$/i.test(b[1]) && /\b(def|import|print|for|assert|=)\b/.test(b[2]));
+  const rest = blocks.filter(b => !py.includes(b)).map((b, i) => [`work-${i + 1}.${EXT[b[1].toLowerCase()] || 'txt'}`, b[2]]);
+  return [...(py.length ? [['run.py', py.map(b => b[2]).join('\n\n')]] : []), ...rest];
+}
 async function custom(agent, msg, call, ctx) {
   const box = sandbox(agent.id), have = Object.keys(box.files());
-  const sys = `You are ${agent.name}, an expert in ${agent.specialty}. You do the job yourself; you never say you can't produce files.
-You work in your own sandbox. To save a file, write a line "FILE: <name>" followed by a fenced code block with its full contents.
-Pick a real file format for the job (for 3D models use .obj or a Python script that writes one; for docs .md; for code its language).
-If a Python script would compute or generate the result, write it as FILE: run.py and it will be run in your sandbox.
-Be brief outside the files. Files already in your sandbox: ${have.join(', ') || 'none'}.`;
+  const sys = `You are ${agent.name}, an expert in ${agent.specialty}. Do the job yourself.
+Put every file you make in a fenced code block, with its name on the line before it, like:
+FILE: run.py
+\`\`\`python
+...
+\`\`\`
+Use a real file format for the job (3D models: .obj, or a Python script that writes one; notes: .md; code: its language).
+If Python can make or check the result, write it as run.py: it will be run. Add assert statements that test your code.
+Keep words short. Files already in your sandbox: ${have.join(', ') || 'none'}.`;
   const prior = (agent._hist ||= []).slice(-4);
-  const r = await call('think', {messages: [{role: 'system', content: sys}, ...prior, {role: 'user', content: msg}]});
-  if (!r.ok) return {reply: r.error};
-  let text = r.text, files = [];
-  for (const m of text.matchAll(/FILE:\s*`?([\w./ -]+?)`?\s*\n+```[\w+-]*\n([\s\S]*?)```/g)) { const w = await call('write_file', {path: m[1].trim(), content: m[2]}); if (w.ok) files.push(w.path); }
-  if (!files.length) { const b = text.match(/```([\w+-]*)\n([\s\S]*?)```/); if (b) { const ext = {python: 'py', py: 'py', obj: 'obj', js: 'js', javascript: 'js', html: 'html', json: 'json', md: 'md', svg: 'svg', cpp: 'cpp', csv: 'csv'}[b[1].toLowerCase()] || 'txt';
-    const w = await call('write_file', {path: `work-${Date.now() % 100000}.${ext}`, content: b[2]}); if (w.ok) files.push(w.path); } }
+  let text = '', found = [];
+  for (const temperature of [0.2, 0.7]) {  // if no file came back, ask again with a little sampling
+    const r = await call('think', {messages: [{role: 'system', content: sys}, ...prior, {role: 'user', content: msg}], temperature});
+    if (!r.ok) return {reply: r.error};
+    text = r.text; found = extractFiles(text); if (found.length) break;
+  }
+  const files = [];
+  for (const [path, content] of found) { const w = await call('write_file', {path, content}); if (w.ok) files.push(w.path); }
   let ran = '';
   const script = files.find(f => f.endsWith('.py'));
   if (script) {
-    for (let attempt = 1; attempt <= 2; attempt++) {
-      const code = box.read(script).content, res = await call('python_run', {code: SANDBOX_PY(agent.id, box.files()) + code + SANDBOX_SAVE});
+    let code = box.read(script).content;
+    if (/\bdef \w+/.test(code) && !/\bassert\b/.test(code)) {  // code with no checks: XON writes its own tests first
+      const t = await call('think', {messages: [{role: 'system', content: 'You write Python tests.'}, {role: 'user', content: `Write 3 to 5 plain assert statements that check this code is correct. Reply with one python block of asserts only.\n\`\`\`python\n${code}\n\`\`\``}], temperature: 0.1});
+      const m = t.ok && t.text.match(/```(?:python|py)?\n([\s\S]*?)```/);
+      if (m && /\bassert\b/.test(m[1])) { code += '\n\n' + m[1].split('\n').filter(l => /^\s*assert\b/.test(l)).join('\n'); box.write(script, code); }
+    }
+    for (let attempt = 1; attempt <= 3; attempt++) {
+      code = box.read(script).content;
+      const res = await call('python_run', {code: SANDBOX_PY(agent.id, box.files(), code) + SANDBOX_SAVE});
       const made = (res.output || '').match(/@@XONFILES@@([\s\S]*)$/);
       if (made) { try { for (const [p, c] of Object.entries(JSON.parse(made[1]))) { const w = box.write(p, c); if (w.ok && !files.includes(w.path)) files.push(w.path); } } catch (e) {} }
       const out = (res.output || '').replace(/@@XONFILES@@[\s\S]*$/, '').trim();
-      if (res.ok) { ran = `\n\nI ran ${script}${attempt > 1 ? ' (fixed on the second try)' : ''}${out ? ':\n```\n' + out.slice(-800) + '\n```' : '.'}`; break; }
-      if (attempt === 2) { ran = `\n\n${script} still fails:\n\`\`\`\n${out.slice(-600)}\n\`\`\``; break; }
-      const fix = await call('think', {messages: [{role: 'system', content: sys}, {role: 'user', content: `${script} failed:\n${out.slice(-800)}\nReply with FILE: ${script} and the fixed script.`}]});
-      const m = fix.ok && fix.text.match(/```[\w]*\n([\s\S]*?)```/); if (!m) break; box.write(script, m[1]);
+      if (res.ok) { ran = `\n\nI ran ${script}${attempt > 1 ? ` (fixed on try ${attempt})` : ''}${/\bassert\b/.test(code) ? ', its checks pass' : ''}${out ? ':\n```\n' + out.slice(-800) + '\n```' : '.'}`; break; }
+      if (attempt === 3) { ran = `\n\n${script} still fails after 3 tries, so don't trust it:\n\`\`\`\n${out.slice(-600)}\n\`\`\``; break; }
+      const fix = await call('think', {temperature: attempt === 1 ? 0.3 : 0.6, messages: [{role: 'system', content: sys}, {role: 'user', content:
+        `Task: ${msg}\n\nThis ${script} fails:\n\`\`\`python\n${code}\n\`\`\`\nError:\n\`\`\`\n${out.slice(-700)}\n\`\`\`\nFind the bug (one sentence), then reply with the whole fixed script in one python block. Keep the asserts unless an assert itself is wrong.`}]});
+      const m = fix.ok && fix.text.match(/```(?:python|py)?\n([\s\S]*?)```/); if (!m) continue;
+      box.write(script, m[1]);
     }
   }
   agent._hist = [...prior, {role: 'user', content: msg}, {role: 'assistant', content: text.slice(0, 1500)}];
   const all = list().map(x => x.id === agent.id ? {...x, _hist: agent._hist} : x); save(all);
-  return {reply: text.replace(/FILE:\s*`?[\w./ -]+`?\s*\n+```[\w+-]*\n[\s\S]*?```/g, m => `**${m.match(/FILE:\s*`?([\w./ -]+?)`?\s*\n/)[1]}** saved to sandbox.`) + ran, files};
+  let shown = files.length ? text.replace(FILE_RX, (m, name) => `**${name.trim()}** saved to sandbox.`) : text;
+  const first = found.find(f => f[0] === script)?.[1];
+  if (script && box.read(script).content !== first)  // it changed while testing/fixing: show the final version
+    shown = shown.replace(/```[\w+-]*\n[\s\S]*?```/, '').trim() + `\n\nFinal ${script}:\n\`\`\`python\n${box.read(script).content.trim()}\n\`\`\``;
+  return {reply: shown + ran, files, ok: !/still fails/.test(ran)};
 }
 // Python runs inside the agent's sandbox: its files appear as real files, and new/changed ones are copied back.
-const SANDBOX_PY = (id, files) => `import os, json as _j, shutil as _sh\n_d = '/box/' + ${JSON.stringify(id)}\n_sh.rmtree(_d, ignore_errors=True); os.makedirs(_d); os.chdir(_d)\nfor _p, _c in _j.loads(${JSON.stringify(JSON.stringify(files))}).items():\n    os.makedirs(os.path.dirname(_p) or '.', exist_ok=True); open(_p, 'w').write(_c)\n_before = {p: open(p).read() for p in os.listdir('.') if os.path.isfile(p)}\n`;
+const SANDBOX_PY = (id, files, code) => `import os, sys, json as _j, shutil as _sh, ast as _ast
+_d = '/box/' + ${JSON.stringify(id)}
+os.chdir('/'); _sh.rmtree(_d, ignore_errors=True); os.makedirs(_d, exist_ok=True); os.chdir(_d)
+for _p, _c in _j.loads(${JSON.stringify(JSON.stringify(files))}).items():
+    os.makedirs(os.path.dirname(_p) or '.', exist_ok=True); open(_p, 'w').write(_c)
+_before = {p: open(p).read() for p in os.listdir('.') if os.path.isfile(p)}
+_src = ${JSON.stringify(JSON.stringify(code))}
+_src = _j.loads(_src)
+for _n in _ast.walk(_ast.parse(_src)):  # a function that is only a docstring / pass is not done yet
+    if isinstance(_n, (_ast.FunctionDef, _ast.AsyncFunctionDef)) and all(isinstance(b, _ast.Pass) or (isinstance(b, _ast.Expr) and isinstance(getattr(b, 'value', None), _ast.Constant)) for b in _n.body):
+        raise NotImplementedError(f"function {_n.name}() has no body yet: write the code inside it")
+import unittest as _ut
+_um = _ut.main
+def _main(*a, **k):  # unittest.main() without killing the run; failures still fail
+    k['exit'] = False; k.setdefault('module', _mod); k.setdefault('argv', ['run.py']); r = _um(*a, **k)
+    if not r.result.wasSuccessful(): raise AssertionError('unit tests failed')
+_ut.main = _main
+import types as _ty
+_mod = _ty.ModuleType('__main__'); _mod.__file__ = 'run.py'
+try:
+    exec(compile(_src, 'run.py', 'exec'), _mod.__dict__)
+except SystemExit as _e:
+    if _e.code not in (0, None): raise
+`;
 const SANDBOX_SAVE = `\nimport os as _o, json as _j2\n_out = {}\nfor _p in _o.listdir('.'):\n    if _o.path.isfile(_p) and _o.path.getsize(_p) < 200000:\n        try:\n            _c = open(_p).read()\n            if _before.get(_p) != _c: _out[_p] = _c\n        except Exception: pass\nprint('@@XONFILES@@' + _j2.dumps(_out))\n`;
 
 const NUMS = {a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5};

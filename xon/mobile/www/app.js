@@ -6,7 +6,7 @@ const store = {get(k, d) { try { const v = localStorage.getItem(k); return v ===
   set(k, v) { try { localStorage.setItem(k, JSON.stringify(v)); } catch (e) {} }};
 const MODES = {fast: {max: 192, turns: 2}, balanced: {max: 360, turns: 4}, best: {max: 700, turns: 8}};
 const SYSTEM = "You are XON, a small coding assistant running on the user's phone. Be concise. Put code in fenced blocks with a language tag. If unsure, say so.";
-let settings = {mode: 'balanced', engine: 'auto', idle: true, cool: true, brain: 'phone',
+let settings = {mode: 'balanced', engine: 'auto', idle: true, cool: true, brain: 'phone', sub: 'xon',
   api: {kind: 'ollama', url: 'http://192.168.1.10:11434', model: 'llama3.2', key: ''}, ...store.get('xon-settings', {})};
 const saveSettings = () => store.set('xon-settings', settings);
 
@@ -32,7 +32,7 @@ function llm() {
   return worker;
 }
 async function generate(messages, onToken = () => {}, opts = {}) {
-  if (settings.brain === 'api') return apiGenerate(messages, onToken, opts);
+  if ((opts.brain || settings.brain) === 'api' && settings.api.url) return apiGenerate(messages, onToken, opts);
   clearTimeout(idleTimer);
   const mode = MODES[settings.mode];
   let max = opts.max || mode.max;
@@ -98,6 +98,24 @@ async function apiGenerate(messages, onToken, opts = {}) {
   const secs = (performance.now() - t0) / 1000, tps = +(text.length / 4 / secs).toFixed(1);
   setStatus('on', `API ready · ${a.model}`); $('#mspeed').textContent = `answered in ${secs.toFixed(1)}s`;
   return {tps, seconds: +secs.toFixed(1), device: 'api', first_token_ms: null};
+}
+// Paste an Ollama key and that's it: XON points at Ollama's servers, checks the key, picks the best model it can use.
+const PREFERRED = ['gpt-oss:120b', 'qwen3-coder:480b', 'deepseek-v3.1:671b', 'gpt-oss:20b', 'kimi-k2', 'qwen3', 'llama'];
+async function useOllamaKey(key) {
+  key = key.trim().replace(/^Bearer\s+/i, '').replace(/^["']|["']$/g, ''); if (!key) return;
+  const out = $('#key-out'); out.textContent = 'checking key...';
+  settings.api = {...settings.api, kind: 'ollama', url: 'https://ollama.com', key};
+  try {
+    const r = await http('GET', 'https://ollama.com/api/tags', null, {Authorization: 'Bearer ' + key});
+    if (r.status === 401 || r.status === 403) throw new Error("Ollama says this key isn't valid");
+    if (r.status >= 400) throw new Error('HTTP ' + r.status);
+    const names = (r.json().models || []).map(m => m.name || m.model);
+    const pick = PREFERRED.map(p => names.find(n => n === p || n.startsWith(p))).find(Boolean) || names[0] || 'gpt-oss:120b';
+    settings.api.model = pick; settings.brain = 'api'; settings.sub = 'api'; saveSettings();
+    $('#api-url').value = settings.api.url; $('#api-model').value = pick; $('#api-key').value = key;
+    seg('brain', 'brain'); seg('sub', 'sub'); seg('apikind', null); showBrain();
+    out.textContent = `✓ Key accepted. Using ${pick} on Ollama's servers for chat and sub-agents.`; $('#ollama-key').value = '';
+  } catch (e) { saveSettings(); out.textContent = `✗ ${e.message}. Check you copied the whole key (ollama.com → Settings → Keys).`; }
 }
 async function apiTest() {
   const out = $('#api-out'); out.textContent = 'connecting...';
@@ -193,7 +211,9 @@ const ctx = {player: 'Ash', tools: {
   animate: async ({prompt}) => { try { const spec = Anim.parse(prompt); lastSpec = spec; return {ok: true, spec, check: Anim.check(spec)}; } catch (e) { return {ok: false, error: e.message}; } },
   save_gif: async () => saveGif(lastSpec),
   python_run: ({code}) => python(code),
-  think: async ({messages}) => { let text = ''; try { await generate(messages, t => { text += t; }, {max: settings.brain === 'api' ? 1500 : 600, temperature: 0.3}); } catch (e) { return {ok: false, error: e.message}; } return {ok: true, text}; },
+  // sub-agents think with XON's model on the phone, or on the API when "Sub-agents: API" is picked
+  think: async ({messages, temperature = 0.2}) => { const brain = settings.sub === 'api' ? 'api' : 'phone'; let text = '';
+    try { await generate(messages, t => { text += t; }, {brain, max: brain === 'api' ? 1500 : 640, temperature}); } catch (e) { return {ok: false, error: e.message}; } return {ok: true, text}; },
   write_code: async ({task, feedback}) => {
     const fb = feedback ? `\n\nYour last attempt failed with:\n${feedback}\nFix it.` : '';
     const msgs = [{role: 'system', content: 'You are a careful Python engineer.'},
@@ -264,14 +284,17 @@ const hw = {cores: navigator.hardwareConcurrency || '?', memory: navigator.devic
 function showHw() { $('#hw').innerHTML = Object.entries({'CPU cores': hw.cores, 'Memory': hw.memory, 'GPU': hw.gpu, 'Threads': hw.threads, 'Engine': hw.engine, 'Last speed': hw.last}).map(([k, v]) => `<span class="note">${k}</span><span>${esc(v)}</span>`).join(''); }
 function seg(id, key) { const obj = key ? settings : settings.api; key ||= 'kind';
   document.querySelectorAll(`#${id} button`).forEach(b => { b.setAttribute('aria-pressed', String(obj[key] === b.dataset.v));
-  b.onclick = () => { const changed = obj[key] !== b.dataset.v; obj[key] = b.dataset.v; saveSettings(); seg(id, obj === settings ? key : null); if (id === 'brain') showBrain();
+  b.onclick = () => { const changed = obj[key] !== b.dataset.v; obj[key] = b.dataset.v; saveSettings(); seg(id, obj === settings ? key : null); if (id === 'brain' || id === 'sub') showBrain();
     if (id === 'apikind' && changed) { $('#api-url').value = settings.api.url = b.dataset.v === 'ollama' ? 'http://192.168.1.10:11434' : 'http://192.168.1.10:1234/v1'; saveSettings(); }
     if (key === 'engine' && changed && worker) { worker.terminate(); worker = null; ready = false; setStatus('', 'engine changed; reloads on next message'); } }; }); }
 seg('mode', 'mode'); seg('engine', 'engine'); seg('brain', 'brain'); seg('apikind', null);
 $('#cool').checked = settings.cool; $('#cool').onchange = e => { settings.cool = e.target.checked; saveSettings(); worker?.terminate(); worker = null; ready = false; setStatus('', 'reloads on next message'); };
 for (const k of ['url', 'model', 'key']) { $('#api-' + k).value = settings.api[k]; $('#api-' + k).onchange = e => { settings.api[k] = e.target.value.trim(); saveSettings(); }; }
 $('#api-test').onclick = apiTest;
-function showBrain() { $('#api-card').hidden = settings.brain !== 'api'; if (settings.brain === 'api') { worker?.postMessage({type: 'unload'}); setStatus('on', `API · ${settings.api.model}`); } }
+$('#key-go').onclick = () => useOllamaKey($('#ollama-key').value);
+$('#ollama-key').addEventListener('paste', e => setTimeout(() => useOllamaKey(e.target.value), 0));
+seg('sub', 'sub');
+function showBrain() { $('#api-card').hidden = settings.brain !== 'api' && settings.sub !== 'api'; if (settings.api.key && /ollama\.com/.test(settings.api.url)) $('#key-out').textContent = `✓ Ollama key saved · ${settings.api.model}`; if (settings.brain === 'api') { worker?.postMessage({type: 'unload'}); setStatus('on', `API · ${settings.api.model}`); } }
 showBrain();
 $('#idle').checked = settings.idle; $('#idle').onchange = e => { settings.idle = e.target.checked; store.set('xon-settings', settings); armIdle(); };
 $('#bench').onclick = async () => { $('#bench').disabled = true; $('#benchout').textContent = 'testing (loads the model first if needed)...';
@@ -292,4 +315,4 @@ document.querySelectorAll('nav button').forEach(b => b.onclick = () => {
 try { const t = localStorage.getItem('xon-theme'); if (t) document.documentElement.dataset.theme = t; } catch (e) {}
 $('#theme').onclick = () => { const cur = document.documentElement.dataset.theme || (matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
   const nx = cur === 'dark' ? 'light' : 'dark'; document.documentElement.dataset.theme = nx; try { localStorage.setItem('xon-theme', nx); } catch (e) {} };
-window.XON = {generate, python, Agents};  // for testing
+window.XON = {generate, python, Agents, ctx};  // for testing and the benchmark
