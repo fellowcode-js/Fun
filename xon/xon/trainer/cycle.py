@@ -120,6 +120,20 @@ class Cycle:
                           init_from=prom if prom.exists() else None, resume=True, seed=self.cfg["xon"]["seed"] + cycle,
                           log_path=self.logs / "lm_train.jsonl", gov=self.gov)
         r.update({"train_tokens": int(len(train_ids)), "val_tokens": int(len(val_ids)), "path": str(out / "model.pt")})
+        ex = self.cfg.get("exhort", {})
+        if ex.get("enabled", True) and (out / "model.pt").exists():
+            status_write(self.cfg, phase="exhort")
+            try:
+                from xon.exhort import ExhortConfig, exhort_lm_checkpoint
+                ecfg = ExhortConfig.from_dict({**ex, "heal_steps": 15 if self.quick else ex.get("heal_steps", 60)})
+                e = exhort_lm_checkpoint(out / "model.pt", train_ids, val_ids, cfg=ecfg)
+                r["exhort"] = {k: e.get(k) for k in ("found", "broken", "dead", "useless", "reborn", "kept",
+                                                      "val_before", "val_after", "reason")}
+                if e.get("kept"):
+                    r["val_loss"] = e["val_after"]
+                log.info(f"exhort: {e['found']} bad neurons of {e['neurons']}, reborn {e['reborn']}: {e['reason']}")
+            except Exception as err:  # never let the optional pass break a cycle
+                r["exhort"] = {"error": f"{type(err).__name__}: {err}"}
         return r
 
     def train_vision(self, image_recs, ui, pairs, cycle) -> dict:

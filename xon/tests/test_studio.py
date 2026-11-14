@@ -147,3 +147,25 @@ def test_mcp_stdio_protocol(home, tmp_path):
     assert (Path(home["_root"]) / "STOP").exists()
     assert out[6]["error"]["code"] == -32601
     assert len(out) == 6  # the notification got no reply
+
+
+def test_subagent_endpoints(studio):
+    from xon.game import DemoGame
+    DemoGame._shared.clear()
+    base, _ = studio
+    code, body = req(base + "/api/subagents", {"task": "be a shopkeeper in my game named Greta", "toolkit": "demo", "brain": "rules"})
+    r = json.loads(body)
+    assert code == 200 and r["agent"]["id"] == "greta" and "open_gate" not in r["agent"]["tools"]
+    assert any(a["id"] == "greta" for a in json.loads(req(base + "/api/subagents")[1])["agents"])
+    t = json.loads(req(base + "/api/subagents/talk", {"id": "greta", "message": "buy 2 torches", "player": "Ash"})[1])
+    assert "6 gold" in t["reply"] and t["world"]["player"]["bag"] == {"torch": 2}
+    assert req(base + "/api/subagents/talk", {"id": "nobody", "message": "hi"})[0] == 500
+    assert json.loads(req(base + "/api/subagents/delete", {"id": "greta"})[1])["ok"]
+    DemoGame._shared.clear()
+
+
+def test_exhort_endpoint_without_model(studio):
+    base, _ = studio
+    r = json.loads(req(base + "/api/exhort", {"dry_run": True})[1])
+    assert r["ok"] is False and "xon train" in r["error"]
+    assert json.loads(req(base + "/api/exhort")[1])["history"] == []

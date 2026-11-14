@@ -53,7 +53,10 @@ DEFAULTS: dict = {
     "transport": {"kind": "folder", "url": ""},
     "promote": {"noise_margin": 0.002, "max_regression": 0.02},
     "distill": {"enabled": False},
-    "practice": {"limit": 10},  # verified practice solutions per cycle (rejection sampling); 0 disables
+    "practice": {"limit": 10},
+    # Exhort: after each LM training run, find dead/broken/useless neurons and reincarnate them (kept only if the
+    # validation loss does not get worse; the promotion gate still decides). See xon/exhort.py.
+    "exhort": {"enabled": True, "heal_steps": 60, "max_frac": 0.1},  # verified practice solutions per cycle (rejection sampling); 0 disables
 }
 
 

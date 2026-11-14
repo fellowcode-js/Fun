@@ -24,6 +24,8 @@ xon studio --open          # prints http://127.0.0.1:8790/#token=...  and opens 
 | Code | "Write, test, fix": XON's write -> test -> retry -> repair loop. Examples in your request (`f(2) == 4`, `'a' -> 'b'`) become fixed tests. Also "Find and fix the bug" for failing tests. |
 | Design | Describe a page or app screen (dashboard, settings, desktop window, pricing...). Live preview in a sandboxed frame, critique score with computed contrast. |
 | Agent | Any XON agent task; live plan, tool steps, thinking notes and summary. Runs in `workspace/` (a git repo with checkpoints). |
+| Sub-agents | Spawn a role sub-agent from one line ("be a shopkeeper in my game named Greta"), talk to it as a player, see every tool call it makes and the game world it changes. See [subagents.md](subagents.md). |
+| Exhort | Diagnose the XON LM's neurons (broken / dead / useless) and reincarnate the bad ones; kept only if validation loss does not get worse. See [exhort.md](exhort.md). |
 | Connect | Cloud model keys (memory only, never written to disk) and the MCP command for Claude Code. |
 | Debug | Download a scrubbed debug bundle; current status. |
 

@@ -185,6 +185,20 @@ Recorded per item; totals are in the AUTO block. Permissive code (PSF-2.0, MIT, 
 all-rights-reserved pages were skipped. No pretrained weights were used (`init = "scratch"`), so there is no
 third-party model license. Trained checkpoints are **not** shipped in the zip.
 
+## v0.4: Exhort and sub-agents (measured)
+| What | Result |
+|---|---|
+| Exhort on sabotaged MLPs (5 seeds, 10/32 neurons killed, 150 steps) | val MSE: training on 0.149, random rebirth 0.123, **Exhort 0.113** |
+| Exhort on an LM with an inf weight (loss NaN) | repaired: finite loss, all weights finite |
+| Exhort on the healthy trained XON LM (3 seeds) | ties with 60 extra plain training steps (5.529 vs 5.530); no dead/broken neurons to fix |
+| Exhort inside `xon train --quick` | 24 of 1024 neurons reborn, kept (val 5.704 -> 5.697) |
+| Shopkeeper sub-agent, rules brain | list, price, buy, haggle -> counter -> "deal", buy-back, wallet; every number from a tool call |
+| Tool permission scoping | shopkeeper offered only its 6 tools; a cloud brain asking for open_gate is denied |
+| Local coder in Studio chat (Fibonacci) | correct function, but its own test asserted fib(30) == 896 (true: 832040); Run caught it |
+| Coder sub-agent (is_prime on 1, 2, 17, 21) | wrote code + tests, ran them in the sandbox: 4/4 passed |
+
+Details: [docs/exhort.md](docs/exhort.md), [docs/subagents.md](docs/subagents.md).
+
 ## Known limits
 - No GPU: Tier B/C untrained; M2 "trains stably for hours" was not exercised.
 - Live crawl was deliberately tiny; most volume came from open datasets and synthetic data.

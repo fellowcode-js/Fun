@@ -47,6 +47,16 @@ TOOLS = {
     "xon_doctor": ("Run `xon doctor` (Python, torch, GPU, browser, disk, network, warm-start model) and return the report.", _s({})),
     "xon_evals": ("Latest measured numbers: last cycle metrics, warm-start coder eval, gate results.", _s({})),
     "xon_debug_bundle": ("Write a scrubbed debug zip (config, log tails, history, gates, artifacts, doctor) and return its path.", _s({})),
+    "xon_subagent_new": ("Spawn a role sub-agent (NPC or helper) from a one-line task, e.g. 'be a shopkeeper in my game named "
+                         "Greta'. toolkit: demo (built-in town), code, or a path to game_tools.json. It only gets the tools its "
+                         "role needs (allow/deny: comma-separated overrides).",
+                         _s({"task": STR, "toolkit": STR, "name": STR, "allow": STR, "deny": STR, "brain": STR}, ["task"])),
+    "xon_subagent_talk": ("Say something to a sub-agent as a player. Returns its reply and every tool call it made.",
+                          _s({"id": STR, "message": STR, "player": STR}, ["id", "message"])),
+    "xon_subagents": ("List sub-agents with their roles and granted tools.", _s({})),
+    "xon_exhort": ("Exhort the promoted XON LM: find broken/dead/useless neurons, reincarnate them, heal, keep only if "
+                   "validation loss does not get worse. dry_run=true only diagnoses; apply=true replaces the promoted LM.",
+                   _s({"dry_run": BOOL, "apply": BOOL})),
     "xon_stop": ("Kill switch: write the STOP file so every XON node halts within seconds.", _s({"reason": STR})),
     "xon_resume": ("Clear the STOP file.", _s({})),
 }
@@ -132,6 +142,22 @@ class Server:
                 return sorted(f.name for f in logs.glob("*") if f.is_file())
             f = jail(logs, a["name"])
             return "\n".join(f.read_text(errors="replace").splitlines()[-int(a.get("lines", 80)):])
+        if name in ("xon_subagent_new", "xon_subagent_talk", "xon_subagents"):
+            from xon.agent import subagents as S
+            if name == "xon_subagents":
+                return S.list_all(self.root)
+            if name == "xon_subagent_new":
+                sp = lambda v: [x.strip() for x in (v or "").split(",") if x.strip()]
+                tk = a.get("toolkit") or None
+                if tk not in (None, "demo", "code"):
+                    tk = str(jail(self.root, tk))
+                return S.create(a["task"], tk, name=a.get("name"), allow=sp(a.get("allow")), deny=sp(a.get("deny")),
+                                brain=a.get("brain", "auto"), root=self.root).spec
+            return S.load(a["id"], self.root).talk(a["message"], player=a.get("player") or "player")
+        if name == "xon_exhort":
+            from xon.exhort import exhort_promoted
+            r = exhort_promoted(self.cfg, dry_run=bool(a.get("dry_run")), apply=bool(a.get("apply")))
+            return r
         if name == "xon_doctor":
             from xon.workstation import doctor
             buf = io.StringIO()

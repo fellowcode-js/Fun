@@ -83,6 +83,25 @@ Re-read this first when resuming. Newest entries at the bottom of each section.
 - Found while testing: 100 s cold start on first chat (now preloaded, ~9 s); header overflow on phones (fixed).
 - Tests: 73 passed (6 new for Studio/MCP, fake model + fake cloud server).
 
+## v0.4: Exhort + sub-agents (user asked: delete broken/useless neurons and reincarnate them better, called
+## Exhort; spawn task-based sub-agents like a game shopkeeper with access to the game's tools; a place to talk to it)
+- Exhort (`xon/exhort.py`): broken / dead / useless neuron diagnosis, network-wide delete, gradient-guided rebirth
+  (best of 4 candidates, zero-start outgoing weights + one gradient step), heal, rollback if validation is worse.
+  Runs after every LM training run, `xon exhort`, Studio view, MCP tool.
+  - Bug found while testing: rebirth of layer 0 used gradients poisoned by a still-broken (inf) neuron in layer 1.
+    Fix: delete every bad neuron in the whole network before any rebirth. Regression test `test_broken_lm_is_repaired`.
+  - Sabotaged MLPs: val MSE 0.113 vs 0.149 for just training on. Healthy trained LM: ties with plain extra training
+    (no dead/broken neurons there). Documented as such.
+- Sub-agents (`xon/agent/subagents.py`, `xon/game/`): role from the task, name, persona, rules, tool grants;
+  tools denied outside the grant; brains rules / local voice / cloud tool-calling; game tools via HTTP or Python;
+  built-in demo town; code toolkit for coder sub-agents. CLI `xon subagent`, Studio view, MCP tools, HTTP API.
+  - Bugs found while testing: "for 80 gold" parsed as quantity 8; coder reply said "not tested" when the model put
+    its tests in the same block; phone layout overflow from wide code blocks (grid `1fr` min-width); `[hidden]`
+    overridden by `.form label{display:flex}`. All fixed.
+- Setup verified in a fresh cloud box: torch, deps, Qwen download, `xon train --quick` (2.6 min, Exhort ran in the
+  cycle: 24 reborn, kept), Studio screenshots of chat, sub-agents and Exhort.
+- Tests: 88 passed (fast suite; 15 new).
+
 ## Next (if continued)
 - Tier B on a real GPU (docs/cloud.md); OCR for from_screenshot text; better icon detection.
 

@@ -158,6 +158,14 @@ def make_handler(st: State):
                 if not job:
                     return self._json(404, {"error": "no such job"})
                 return self._json(200, _job_view(job))
+            if path == "/api/subagents":
+                from xon.agent import subagents as S
+                return self._json(200, {"agents": S.list_all(st.root)})
+            if path == "/api/game/demo":
+                from xon.game import DemoGame
+                return self._json(200, DemoGame.shared(st.root).state)
+            if path == "/api/exhort":
+                return self._json(200, {"history": _tail_jsonl(config.path(st.cfg, "logs") / "exhort.jsonl", 10)})
             if path == "/api/debug-bundle":
                 from xon.studio.debug import bundle
                 p = bundle(st.cfg, extra={"studio_errors": st.errors[-50:], "info": st.info()})
@@ -180,6 +188,15 @@ def make_handler(st: State):
                     return self._json(200, _run(st, body))
                 if path == "/api/agent":
                     return self._json(200, _start_job(st, body))
+                if path == "/api/subagents":
+                    return self._json(200, _subagent_new(st, body))
+                if path == "/api/subagents/talk":
+                    return self._json(200, _subagent_talk(st, body))
+                if path == "/api/subagents/delete":
+                    from xon.agent import subagents as S
+                    return self._json(200, {"ok": S.remove(body.get("id", ""), st.root)})
+                if path == "/api/exhort":
+                    return self._json(200, _exhort(st, body))
                 if path == "/api/cloud":
                     prov = body.get("provider")
                     if prov not in ("anthropic", "openai"):
@@ -269,6 +286,75 @@ def _design(st: State, body: dict) -> dict:
     out.write_text(g["html"])
     return {"ok": True, "engine": g["engine"], "html": g["html"], "score": rep.get("score"), "issues": rep.get("issues", [])[:12],
             "saved": str(out)}
+
+
+def _tail_jsonl(p: Path, n: int) -> list:
+    if not p.exists():
+        return []
+    return [json.loads(l) for l in p.read_text().splitlines()[-n:] if l.strip()]
+
+
+def _split(v) -> list[str]:
+    if isinstance(v, list):
+        return [str(x) for x in v]
+    return [x.strip() for x in str(v or "").split(",") if x.strip()]
+
+
+def _subagent_new(st: State, body: dict) -> dict:
+    from xon.agent import subagents as S
+    task = (body.get("task") or "").strip()
+    if not task:
+        raise ValueError("describe the sub-agent, e.g. 'be a shopkeeper in my game'")
+    tk = body.get("toolkit") or None
+    if tk not in (None, "demo", "code"):
+        tk = json.loads(tk) if isinstance(tk, str) and tk.lstrip().startswith("{") else tk
+        if isinstance(tk, str):
+            raise ValueError("toolkit must be demo, code, or pasted game_tools.json content")
+    sa = S.create(task, tk, name=body.get("name") or None, role=body.get("role") or None, allow=_split(body.get("allow")),
+                  deny=_split(body.get("deny")), brain=body.get("brain", "auto"), root=st.root)
+    return {"ok": True, "agent": sa.spec, "tools": sa.tk.specs()}
+
+
+def _subagent_talk(st: State, body: dict) -> dict:
+    from xon.agent import subagents as S
+    sa = S.load(body.get("id", ""), st.root)
+    msg = (body.get("message") or "").strip()
+    if not msg:
+        raise ValueError("empty message")
+    brain = body.get("brain") or sa.spec.get("brain", "auto")
+    backend = None
+    if brain in ("auto", "cloud"):
+        backend = st.cloud_backend("anthropic") or st.cloud_backend("openai")
+        if backend is None and brain == "cloud":
+            raise ValueError("no cloud key: add one in Connect, or use the rules / local brain")
+        brain = "cloud" if backend is not None else "rules"
+    if brain == "local":
+        coder = st.coder()
+        if not st.lock.acquire(timeout=30):
+            raise RuntimeError("local model is busy")
+        try:
+            r = sa.talk(msg, player=body.get("player") or "player", brain="local", voice=coder)
+        finally:
+            st.lock.release()
+    else:
+        r = sa.talk(msg, player=body.get("player") or "player", brain=brain, backend=backend)
+    if sa.spec.get("toolkit") == "demo":
+        from xon.game import DemoGame
+        g = DemoGame.shared(st.root).state
+        r["world"] = {"player": g["players"].get(body.get("player") or "player"), "shop_gold": g["shop"]["gold"],
+                      "gate_open": g["gate_open"], "log": g["log"][-5:]}
+    return r
+
+
+def _exhort(st: State, body: dict) -> dict:
+    from xon.exhort import exhort_promoted
+    if not st.lock.acquire(timeout=5):
+        raise RuntimeError("busy with another model job")
+    try:
+        ov = {k: body[k] for k in ("heal_steps", "max_frac") if body.get(k) is not None}
+        return exhort_promoted(st.cfg, dry_run=bool(body.get("dry_run")), apply=bool(body.get("apply")), overrides=ov)
+    finally:
+        st.lock.release()
 
 
 def _run(st: State, body: dict) -> dict:

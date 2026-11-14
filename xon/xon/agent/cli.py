@@ -248,6 +248,63 @@ def cmd_repl(a):
             break
 
 
+def cmd_exhort(a):
+    from xon.exhort import exhort_promoted
+    ov = {k: v for k, v in {"heal_steps": a.heal_steps, "max_frac": a.max_frac}.items() if v is not None}
+    r = exhort_promoted(_cfg(), dry_run=a.dry_run, apply=a.apply, checkpoint=a.checkpoint, overrides=ov)
+    if r.get("ok"):
+        print(f"Exhort: {r['neurons']} neurons checked -> {r['broken']} broken, {r['dead']} dead, {r['useless']} useless")
+        for L in r["layers"]:
+            if L["targets"]:
+                print(f"  {L['name']:<16} {len(L['targets']):>3}/{L['size']}  broken {L['broken'][:8]} dead {L['dead'][:8]} useless {L['useless'][:8]}")
+        print(f"  reborn {r['reborn']}  kept={r['kept']}  ({r['reason']})" + (f"\n  applied to {r['applied']}" if r.get("applied") else ""))
+        return 0
+    _print(r)
+    return 1
+
+
+def cmd_subagent(a):
+    from xon.agent import subagents as S
+    from xon import config
+    root = Path(a.root).resolve() if getattr(a, "root", None) else config.find_root()
+    if a.action == "new":
+        split = lambda v: [x.strip() for x in (v or "").split(",") if x.strip()]
+        sa = S.create(" ".join(a.args), a.toolkit, name=a.name, role=a.role, allow=split(a.allow), deny=split(a.deny),
+                      brain=a.brain, root=root)
+        _print(sa.spec)
+        print(f"\nTalk to it:  xon subagent talk {sa.spec['id']}")
+    elif a.action == "list":
+        for s in S.list_all(root):
+            print(f"{s['id']:<18} {s['role']:<11} {s['brain']:<6} tools: {', '.join(s['tools']) or '(none)'}")
+    elif a.action == "show":
+        _print(S.load(a.args[0], root).spec)
+    elif a.action == "rm":
+        print("removed" if S.remove(a.args[0], root) else "no such sub-agent")
+    elif a.action == "talk":
+        sa = S.load(a.args[0], root)
+        line = " ".join(a.args[1:])
+        def say(msg):
+            r = sa.talk(msg, player=a.player, brain=a.brain if a.brain != "auto" else None)
+            for act in r["actions"]:
+                res = act["result"]
+                mark = "DENIED" if res.get("denied") else ("ok" if res.get("ok", True) else "fail")
+                print(f"   [{act['tool']}({', '.join(f'{k}={v}' for k, v in act['args'].items())}) -> {mark}]")
+            print(f"{sa.name}: {r['reply']}")
+        if line:
+            say(line)
+            return 0
+        print(f"Talking to {sa.name} ({sa.spec['role']}, brain {sa.brain()}). Empty line or Ctrl+D to leave.")
+        while True:
+            try:
+                msg = input(f"{a.player}> ").strip()
+            except EOFError:
+                break
+            if not msg:
+                break
+            say(msg)
+    return 0
+
+
 BISCUIT = r"""
    /\_/\     Biscuit (XON's cat)
   ( o.o )    brown & white, mostly napping,
@@ -352,6 +409,25 @@ def main(argv=None):
     s = sp.add_parser("repl", help="interactive agent with slash commands")
     s.add_argument("--mode", default="ask")
     s.set_defaults(fn=cmd_repl)
+    s = sp.add_parser("exhort", help="find dead/broken/useless neurons in the XON LM and reincarnate them better")
+    s.add_argument("--dry-run", action="store_true", help="only diagnose")
+    s.add_argument("--apply", action="store_true", help="replace the promoted LM if Exhort kept the result")
+    s.add_argument("--checkpoint", help="a specific LM checkpoint instead of the promoted one")
+    s.add_argument("--heal-steps", type=int)
+    s.add_argument("--max-frac", type=float)
+    s.set_defaults(fn=cmd_exhort)
+    s = sp.add_parser("subagent", help="spawn role sub-agents (NPCs) with game tools: new | list | show | talk | rm")
+    s.add_argument("action", choices=["new", "list", "show", "talk", "rm"])
+    s.add_argument("args", nargs="*", help="new: the task text; talk: ID [message]; show/rm: ID")
+    s.add_argument("--toolkit", help="demo (built-in town), code, or a game_tools.json path")
+    s.add_argument("--name")
+    s.add_argument("--role", help="force a role: " + "shopkeeper, blacksmith, innkeeper, guard, questgiver, coder, npc")
+    s.add_argument("--allow", help="extra tools to grant, comma separated")
+    s.add_argument("--deny", help="tools to withhold, comma separated")
+    s.add_argument("--brain", default="auto", choices=["auto", "rules", "local", "cloud"])
+    s.add_argument("--player", default="player")
+    s.add_argument("--root")
+    s.set_defaults(fn=cmd_subagent)
     a = p.parse_args(argv)
     if not getattr(a, "fn", None):
         p.print_help()

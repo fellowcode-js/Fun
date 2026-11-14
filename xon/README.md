@@ -23,6 +23,8 @@ screenshot→HTML), UI-element detection, verified bug repair, and the self-trai
 - [PROGRESS.md](PROGRESS.md): build log (done, decisions, incidents, next); read first when resuming work.
 - [XON.md](XON.md): project memory the agent loads every session; rules for agents editing this repo.
 - [docs/studio.md](docs/studio.md): XON Studio app, connecting Claude (cloud, MCP), debug bundles.
+- [docs/subagents.md](docs/subagents.md): spawn role sub-agents (game NPCs like a shopkeeper) with only the tools they need.
+- [docs/exhort.md](docs/exhort.md): Exhort, which deletes broken/dead/useless neurons and reincarnates them better.
 - [docs/cloud.md](docs/cloud.md): copy-paste steps for a rented GPU box (Tier B/C), Docker, split nodes, spot.
 - [data/samples/README.md](data/samples/README.md): the tiny license-clean samples that ship in the zip.
 
@@ -76,6 +78,22 @@ Brain: an external chat endpoint is used for planning when `ANTHROPIC_API_KEY` o
 (+`XON_OPENAI_BASE` for any OpenAI-compatible server) is set; otherwise a deterministic **rules planner** handles the
 core task shapes (build app, fix tests, design/critique page) and says so for anything else. The local XON LM does
 completion (`xon complete`) and ranks repair candidates.
+
+## Sub-agents (NPCs and helpers)
+```bash
+xon subagent new "be a shopkeeper in my game named Greta"     # role, name, persona and tools picked from the task
+xon subagent talk greta --player Ash                           # it sells, haggles, buys back, through real tool calls
+xon subagent new "be the shopkeeper of Riverbend" --toolkit game_tools.json   # your game's own tools (HTTP/Python)
+```
+A sub-agent only gets the tools its role needs (the shopkeeper cannot open the town gate). Brains: offline rules,
+local voice, or Claude with tool calling. Details: [docs/subagents.md](docs/subagents.md).
+
+## Exhort (neuron reincarnation)
+```bash
+xon exhort --dry-run      # which neurons are broken, dead or useless
+xon exhort --apply        # delete them, rebirth them (gradient-guided), heal, keep only if validation improves
+```
+Also runs after every LM training run. Details and honest numbers: [docs/exhort.md](docs/exhort.md).
 
 ## Nodes
 Crawler, trainer and agent talk only through files in a shared exchange (folder, rsync or S3-compatible bucket):
