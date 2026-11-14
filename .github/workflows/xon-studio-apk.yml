@@ -1,0 +1,56 @@
+name: Build XON Studio APK
+
+# Builds the XON Studio phone app and publishes it on the Releases page as XON-Studio.apk
+# (release tag xon-studio-latest). Runs when the app changes, or by hand from the Actions tab.
+on:
+  push:
+    paths: ['xon/mobile/**', '.github/workflows/xon-studio-apk.yml']
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Bundle the on-device runtimes (model runtime, Python, GIF encoder)
+        working-directory: xon/mobile
+        run: |
+          npm ci --ignore-scripts --no-audit --no-fund
+          node scripts/vendor.mjs
+          du -sh www www/vendor
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+      - name: Install Android SDK parts
+        run: |
+          yes | "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" --licenses >/dev/null || true
+          "$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager" "platforms;android-34" "build-tools;34.0.0"
+      - name: Build the APK
+        working-directory: xon/mobile/android
+        env:
+          XON_VERSION_CODE: ${{ github.run_number }}
+        run: |
+          chmod +x gradlew
+          ./gradlew --no-daemon assembleDebug
+          ls -la app/build/outputs/apk/debug/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: XON-Studio-apk
+          path: xon/mobile/android/app/build/outputs/apk/debug/*.apk
+      - name: Publish on the Releases page (direct download link)
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp xon/mobile/android/app/build/outputs/apk/debug/app-debug.apk XON-Studio.apk
+          gh release delete xon-studio-latest --yes --cleanup-tag 2>/dev/null || true
+          gh release create xon-studio-latest XON-Studio.apk --target "$GITHUB_SHA" \
+            --title "XON Studio for Android (build ${{ github.run_number }})" \
+            --notes "Download XON-Studio.apk on your phone, open it, allow installing from your browser, tap Install. Everything runs on the phone; the first chat downloads the coder model once (~560-640 MB, use Wi-Fi). New builds install over old ones and keep the downloaded model."

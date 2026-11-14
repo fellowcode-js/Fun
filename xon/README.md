@@ -24,6 +24,7 @@ screenshot→HTML), UI-element detection, verified bug repair, and the self-trai
 - [XON.md](XON.md): project memory the agent loads every session; rules for agents editing this repo.
 - [docs/studio.md](docs/studio.md): XON Studio app, connecting Claude (cloud, MCP), debug bundles.
 - [docs/subagents.md](docs/subagents.md): spawn role sub-agents (game NPCs like a shopkeeper) with only the tools they need.
+- [docs/mobile.md](docs/mobile.md): the Android app (XON-Studio.apk), and how it stays fast on a phone.
 - [docs/exhort.md](docs/exhort.md): Exhort, which deletes broken/dead/useless neurons and reincarnates them better.
 - [docs/cloud.md](docs/cloud.md): copy-paste steps for a rented GPU box (Tier B/C), Docker, split nodes, spot.
 - [data/samples/README.md](data/samples/README.md): the tiny license-clean samples that ship in the zip.
@@ -37,6 +38,10 @@ xon init                   # probes hardware, picks tier A/B/C, sizes the run (t
 xon start --all            # crawler + trainer + agent supervisor + dashboard (http://127.0.0.1:8787)
 ```
 `xon stop` (or the dashboard's STOP button) halts every node within seconds.
+
+## XON Studio on your phone
+Download **XON-Studio.apk** from the repository's Releases page and install it: chat and code with the model on
+the phone, run Python, make animations and game characters. No computer, no API keys. See [docs/mobile.md](docs/mobile.md).
 
 ## XON Studio (the app)
 ```bash
