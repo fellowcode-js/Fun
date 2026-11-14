@@ -16,9 +16,24 @@ network use is downloading the coder model once (Wi-Fi recommended).
 |---|---|
 | Chat | Coding chat with Qwen2.5-Coder-0.5B running on the phone. Python code blocks get a **Run** button (real Python on the phone via Pyodide). |
 | Helpers | Make sub-agents: an **animator** (description -> animation, **Save GIF** puts it in Downloads), a **coder** (writes code + tests, runs them, retries once if they fail), and game characters (**Greta** the shopkeeper, **Volk** the guard) in a demo town. Each helper only gets its own tools. |
-| Speed | Fast / Balanced / Best, engine choice, memory saver, a speed test and what your phone supports. |
+| Helpers: any task | Ask for a sub-agent for anything ("a sub-agent for 3D modeling", "a helper that writes song lyrics"), in Helpers or straight from Chat. XON makes a specialist for that task with its own sandbox: it writes files there (FILE: name + code block), runs Python it wrote inside the sandbox, fixes it once if it fails, and you tap a file to save it to Downloads. |
+| Speed | Brain (On this phone / API), Cool mode, Fast / Balanced / Best, engine choice, memory saver, a speed test and what your phone supports. |
 
 Needs the desktop version: training the XON LM, Exhort, C++ (phones have no compiler), design critique.
+
+## API brain (optional, off by default)
+Speed tab > Brain > **API**. Pick **Ollama** (address like `http://192.168.1.10:11434`, model like `llama3.2`) or any
+**OpenAI-compatible** server (LM Studio, llama.cpp server, etc., address ending in `/v1`, optional key). Tap **Test
+connection**. The phone then does no model work at all: fastest, coolest. On the PC start Ollama with
+`OLLAMA_HOST=0.0.0.0 ollama serve` so the phone can reach it on Wi-Fi. Requests are made natively by the app, so plain
+`http://` on your home network works. The key stays on the phone.
+
+## Heat (Cool mode, on by default)
+- Uses 2 CPU cores instead of every core, and the GPU in low-power mode: far less heat for a small speed cost.
+- Short bursts (answers capped at 320 tokens, 160 when warm) with a short rest between answers.
+- Watches tokens/s: a phone that heats up throttles itself, so a drop below 60% of its best speed means "hot"; XON
+  then rests 4 s between answers and shortens them until speed recovers.
+- Stops generating when you leave the app and frees the model after 1 minute in the background (3 minutes idle in the app).
 
 ## How it stays fast
 - **The model never runs on the screen's thread.** It runs in a background worker, so scrolling and typing stay smooth

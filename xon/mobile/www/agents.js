@@ -23,24 +23,45 @@ export function pickRole(task) {
   let best = null, bs = 0;
   for (const [r, d] of Object.entries(ROLES)) { const s = score(t, d.kw) + (game ? 1 : -1); if (s > bs) [best, bs] = [r, s]; }
   if (best && (game || bs >= 2)) return best;
-  let sb = 'animator', ss = 0;
+  let sb = 'custom', ss = 0;
   for (const [r, d] of Object.entries(SPECIALISTS)) { const s = score(t, d.kw); if (s > ss) [sb, ss] = [r, s]; }
-  return sb;
+  return sb;  // anything else: XON builds a custom specialist for that task
 }
 
+// Custom specialist: the specialty comes from the request ("a sub-agent for 3D modeling" -> "3D modeling").
+export function specialty(task) {
+  let t = task.replace(/\b(?:named|called|name is)\s+[A-Z][\w'-]*/g, ' ').trim();
+  t = t.replace(/^(?:please\s+)?(?:make|create|build|spawn|give me|i need|i want)?\s*(?:me\s+)?(?:a|an)?\s*(?:new\s+)?(?:sub-?agent|helper|agent|assistant|bot)?\s*(?:that|who|which|to|for|meant for|made for|focused on|specialized in|good at)?\s*(?:is\s+|does\s+|can\s+|helps?\s+(?:with|me)?\s*)?/i, '');
+  return t.replace(/[.!?]+$/, '').trim().slice(0, 60) || 'general tasks';
+}
+const CUSTOM = {names: ['Nova', 'Atlas', 'Echo', 'Sage', 'Rook', 'Ivy'], tools: ['think', 'write_file', 'read_file', 'python_run']};
+
 export function create(task) {
-  const role = pickRole(task), def = SPECIALISTS[role] || ROLES[role];
+  const role = pickRole(task), def = SPECIALISTS[role] || ROLES[role] || CUSTOM;
   const named = task.match(/\b(?:named|called|name is)\s+([A-Z][\w'-]*)/);
   let h = 0; for (const c of task) h = (h * 31 + c.charCodeAt(0)) >>> 0;
   const name = named ? named[1] : def.names[h % def.names.length];
-  const a = {id: name.toLowerCase().replace(/[^a-z0-9]+/g, '-'), name, role, task, kind: SPECIALISTS[role] ? 'specialist' : 'character',
-    persona: `${name}, ${def.persona}`, tools: [...def.tools], created: Date.now()};
+  const spec = role === 'custom' ? specialty(task) : null;
+  const a = {id: name.toLowerCase().replace(/[^a-z0-9]+/g, '-'), name, role: spec ? 'specialist' : role, task, specialty: spec,
+    kind: spec ? 'custom' : SPECIALISTS[role] ? 'specialist' : 'character',
+    persona: spec ? `${name}, a specialist in ${spec}. Works in its own sandbox and saves what it makes as files.` : `${name}, ${def.persona}`,
+    tools: [...def.tools], created: Date.now()};
   const all = list().filter(x => x.id !== a.id); all.push(a); save(all);
   return a;
 }
 export function list() { try { return JSON.parse(localStorage.getItem('xon-agents') || '[]'); } catch (e) { return []; } }
 function save(v) { try { localStorage.setItem('xon-agents', JSON.stringify(v)); } catch (e) {} }
-export function remove(id) { save(list().filter(a => a.id !== id)); }
+export function remove(id) { save(list().filter(a => a.id !== id)); try { localStorage.removeItem('xon-box-' + id); } catch (e) {} }
+
+// ---------------------------------------------------------------- each custom agent's own sandbox (files only it can touch)
+export const sandbox = id => {
+  const key = 'xon-box-' + id, get = () => { try { return JSON.parse(localStorage.getItem(key) || '{}'); } catch (e) { return {}; } };
+  const put = v => { try { localStorage.setItem(key, JSON.stringify(v)); return true; } catch (e) { return false; } };
+  const clean = p => String(p || '').replace(/\\/g, '/').replace(/^\/+|\.\.(\/|$)/g, '').slice(0, 80) || 'out.txt';
+  return {files: get,
+    write: (path, content) => { const f = get(); f[clean(path)] = String(content).slice(0, 200000); return put(f) ? {ok: true, path: clean(path)} : {ok: false, error: 'sandbox full'}; },
+    read: path => { const f = get(), p = clean(path); return p in f ? {ok: true, path: p, content: f[p]} : {ok: false, error: `no file ${p}`}; }};
+};
 
 // ---------------------------------------------------------------- demo town (the game the characters live in)
 const STOCK = {'iron sword': [120, 3], 'wooden shield': [45, 5], 'health potion': [15, 20], 'mana potion': [18, 12], 'leather boots': [35, 4], torch: [3, 40], rope: [6, 10]};
@@ -82,6 +103,8 @@ export async function talk(agent, msg, ctx) {
     let result;
     if (!agent.tools.includes(tool)) result = {ok: false, denied: true, error: `${tool} was not granted to ${agent.name}`};
     else if (town.tools[tool]) result = town.tools[tool](args);
+    else if (tool === 'write_file') result = sandbox(agent.id).write(args.path, args.content);
+    else if (tool === 'read_file') result = sandbox(agent.id).read(args.path);
     else result = await ctx.tools[tool](args);
     actions.push({tool, args, result}); return result;
   };
@@ -90,6 +113,7 @@ export async function talk(agent, msg, ctx) {
   else if (agent.role === 'coder') out = await coder(agent, msg, call, ctx);
   else if (agent.role === 'shopkeeper') out = {reply: await shop(agent, msg, call, ctx.player || 'Ash')};
   else if (agent.role === 'guard') out = {reply: guard(agent, msg, call)};
+  else if (agent.kind === 'custom') out = await custom(agent, msg, call, ctx);
   return {...out, actions};
 }
 
@@ -116,6 +140,43 @@ async function coder(agent, msg, call, ctx) {
     if (attempt === 2) return {reply: `My code still fails its tests, so don't trust it:\n\`\`\`python\n${r.code.trim()}\n\`\`\`\nError:\n\`\`\`\n${feedback.trim()}\n\`\`\``};
   }
 }
+
+// Custom specialist: thinks in its role, writes its work into its own sandbox, runs Python it wrote, fixes it once.
+async function custom(agent, msg, call, ctx) {
+  const box = sandbox(agent.id), have = Object.keys(box.files());
+  const sys = `You are ${agent.name}, an expert in ${agent.specialty}. You do the job yourself; you never say you can't produce files.
+You work in your own sandbox. To save a file, write a line "FILE: <name>" followed by a fenced code block with its full contents.
+Pick a real file format for the job (for 3D models use .obj or a Python script that writes one; for docs .md; for code its language).
+If a Python script would compute or generate the result, write it as FILE: run.py and it will be run in your sandbox.
+Be brief outside the files. Files already in your sandbox: ${have.join(', ') || 'none'}.`;
+  const prior = (agent._hist ||= []).slice(-4);
+  const r = await call('think', {messages: [{role: 'system', content: sys}, ...prior, {role: 'user', content: msg}]});
+  if (!r.ok) return {reply: r.error};
+  let text = r.text, files = [];
+  for (const m of text.matchAll(/FILE:\s*`?([\w./ -]+?)`?\s*\n+```[\w+-]*\n([\s\S]*?)```/g)) { const w = await call('write_file', {path: m[1].trim(), content: m[2]}); if (w.ok) files.push(w.path); }
+  if (!files.length) { const b = text.match(/```([\w+-]*)\n([\s\S]*?)```/); if (b) { const ext = {python: 'py', py: 'py', obj: 'obj', js: 'js', javascript: 'js', html: 'html', json: 'json', md: 'md', svg: 'svg', cpp: 'cpp', csv: 'csv'}[b[1].toLowerCase()] || 'txt';
+    const w = await call('write_file', {path: `work-${Date.now() % 100000}.${ext}`, content: b[2]}); if (w.ok) files.push(w.path); } }
+  let ran = '';
+  const script = files.find(f => f.endsWith('.py'));
+  if (script) {
+    for (let attempt = 1; attempt <= 2; attempt++) {
+      const code = box.read(script).content, res = await call('python_run', {code: SANDBOX_PY(agent.id, box.files()) + code + SANDBOX_SAVE});
+      const made = (res.output || '').match(/@@XONFILES@@([\s\S]*)$/);
+      if (made) { try { for (const [p, c] of Object.entries(JSON.parse(made[1]))) { const w = box.write(p, c); if (w.ok && !files.includes(w.path)) files.push(w.path); } } catch (e) {} }
+      const out = (res.output || '').replace(/@@XONFILES@@[\s\S]*$/, '').trim();
+      if (res.ok) { ran = `\n\nI ran ${script}${attempt > 1 ? ' (fixed on the second try)' : ''}${out ? ':\n```\n' + out.slice(-800) + '\n```' : '.'}`; break; }
+      if (attempt === 2) { ran = `\n\n${script} still fails:\n\`\`\`\n${out.slice(-600)}\n\`\`\``; break; }
+      const fix = await call('think', {messages: [{role: 'system', content: sys}, {role: 'user', content: `${script} failed:\n${out.slice(-800)}\nReply with FILE: ${script} and the fixed script.`}]});
+      const m = fix.ok && fix.text.match(/```[\w]*\n([\s\S]*?)```/); if (!m) break; box.write(script, m[1]);
+    }
+  }
+  agent._hist = [...prior, {role: 'user', content: msg}, {role: 'assistant', content: text.slice(0, 1500)}];
+  const all = list().map(x => x.id === agent.id ? {...x, _hist: agent._hist} : x); save(all);
+  return {reply: text.replace(/FILE:\s*`?[\w./ -]+`?\s*\n+```[\w+-]*\n[\s\S]*?```/g, m => `**${m.match(/FILE:\s*`?([\w./ -]+?)`?\s*\n/)[1]}** saved to sandbox.`) + ran, files};
+}
+// Python runs inside the agent's sandbox: its files appear as real files, and new/changed ones are copied back.
+const SANDBOX_PY = (id, files) => `import os, json as _j, shutil as _sh\n_d = '/box/' + ${JSON.stringify(id)}\n_sh.rmtree(_d, ignore_errors=True); os.makedirs(_d); os.chdir(_d)\nfor _p, _c in _j.loads(${JSON.stringify(JSON.stringify(files))}).items():\n    os.makedirs(os.path.dirname(_p) or '.', exist_ok=True); open(_p, 'w').write(_c)\n_before = {p: open(p).read() for p in os.listdir('.') if os.path.isfile(p)}\n`;
+const SANDBOX_SAVE = `\nimport os as _o, json as _j2\n_out = {}\nfor _p in _o.listdir('.'):\n    if _o.path.isfile(_p) and _o.path.getsize(_p) < 200000:\n        try:\n            _c = open(_p).read()\n            if _before.get(_p) != _c: _out[_p] = _c\n        except Exception: pass\nprint('@@XONFILES@@' + _j2.dumps(_out))\n`;
 
 const NUMS = {a: 1, an: 1, one: 1, two: 2, three: 3, four: 4, five: 5};
 const qty = t => { t = t.replace(/(?:for|at|pay)?\s*\d+\s*(?:gold|g\b|coins?)/g, ' '); const m = t.match(/\b(\d+)\b/); if (m) return +m[1];

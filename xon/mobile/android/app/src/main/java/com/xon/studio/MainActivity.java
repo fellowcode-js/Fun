@@ -18,13 +18,18 @@ import android.widget.Toast;
 
 import androidx.webkit.WebViewAssetLoader;
 
+import java.io.ByteArrayOutputStream;
 import java.io.File;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import org.json.JSONObject;
 import java.io.FileOutputStream;
 import java.io.OutputStream;
 import java.util.HashMap;
 import java.util.Map;
 
-/** XON Studio: the bundled web app in a WebView. Everything runs on the phone; the only network use is the
+/** XON Studio: the bundled web app in a WebView. Everything runs on the phone unless you turn on the API brain; otherwise the only network use is the
  *  one-time download of the model weights from Hugging Face. */
 public class MainActivity extends Activity {
     private static final String HOST = "appassets.androidplatform.net";
@@ -86,8 +91,34 @@ public class MainActivity extends Activity {
 
     @Override protected void onDestroy() { if (web != null) web.destroy(); super.onDestroy(); }
 
+    /** API brain requests (Ollama / OpenAI-compatible). Done natively so http:// servers on your Wi-Fi work
+     *  without CORS or mixed-content limits. Runs off the UI thread; the answer comes back via window.__xonHttp. */
+    class Net {
+        @JavascriptInterface
+        public void http(final int id, final String method, final String url, final String headers, final String body) {
+            new Thread(() -> {
+                int status = 0; String out;
+                try {
+                    HttpURLConnection c = (HttpURLConnection) new URL(url).openConnection();
+                    c.setRequestMethod(method); c.setConnectTimeout(8000); c.setReadTimeout(300000);
+                    c.setRequestProperty("Content-Type", "application/json");
+                    JSONObject h = new JSONObject(headers == null || headers.isEmpty() ? "{}" : headers);
+                    for (java.util.Iterator<String> it = h.keys(); it.hasNext(); ) { String k = it.next(); c.setRequestProperty(k, h.getString(k)); }
+                    if (body != null && !body.isEmpty()) { c.setDoOutput(true); try (OutputStream o = c.getOutputStream()) { o.write(body.getBytes("UTF-8")); } }
+                    status = c.getResponseCode();
+                    InputStream in = status >= 400 ? c.getErrorStream() : c.getInputStream();
+                    ByteArrayOutputStream buf = new ByteArrayOutputStream(); byte[] b = new byte[16384]; int n;
+                    if (in != null) while ((n = in.read(b)) > 0) buf.write(b, 0, n);
+                    out = buf.toString("UTF-8");
+                } catch (Exception e) { status = 0; out = String.valueOf(e.getMessage()); }
+                final String js = "window.__xonHttp(" + id + "," + status + "," + JSONObject.quote(out) + ")";
+                runOnUiThread(() -> web.evaluateJavascript(js, null));
+            }).start();
+        }
+    }
+
     /** Saves files the app makes (animation GIFs) into the phone's Downloads folder. */
-    class Bridge {
+    class Bridge extends Net {
         @JavascriptInterface
         public boolean saveFile(String name, String base64, String mime) {
             try {

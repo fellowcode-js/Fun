@@ -11,17 +11,18 @@ const MODEL = 'onnx-community/Qwen2.5-Coder-0.5B-Instruct';
 let tok = null, model = null, device = null, loading = null;
 const stopper = new InterruptableStoppingCriteria();
 
-async function pickDevice(pref) {
+async function pickDevice(pref, cool) {
   if (pref !== 'cpu' && self.navigator?.gpu) {
-    try { const a = await navigator.gpu.requestAdapter({powerPreference: 'high-performance'}); if (a) return 'webgpu'; } catch (e) {}
+    try { const a = await navigator.gpu.requestAdapter({powerPreference: cool ? 'low-power' : 'high-performance'}); if (a) return 'webgpu'; } catch (e) {}
   }
   return 'wasm';
 }
 
 async function load(opts) {
   if (model && (!opts.device || opts.device === 'auto' || (opts.device === 'gpu') === (device === 'webgpu'))) return;
-  device = await pickDevice(opts.device === 'cpu' ? 'cpu' : 'auto');
-  const threads = self.crossOriginIsolated ? Math.max(1, Math.min(4, (navigator.hardwareConcurrency || 4) - 1)) : 1;
+  device = await pickDevice(opts.device === 'cpu' ? 'cpu' : 'auto', opts.cool);
+  // Cool mode uses 2 cores, not every core: much less heat, only a little slower (memory speed is the real limit).
+  const threads = self.crossOriginIsolated ? Math.max(1, Math.min(opts.cool ? 2 : 4, (navigator.hardwareConcurrency || 4) - 1)) : 1;
   env.backends.onnx.wasm.numThreads = threads;
   const progress = p => { if (p.status === 'progress') postMessage({type: 'progress', file: p.file, loaded: p.loaded, total: p.total}); };
   postMessage({type: 'status', text: `loading model on ${device === 'webgpu' ? 'GPU' : `CPU (${threads} thread${threads > 1 ? 's' : ''})`}`});
