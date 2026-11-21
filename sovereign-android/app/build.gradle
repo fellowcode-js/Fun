@@ -1,0 +1,17 @@
+plugins { id 'com.android.application' }
+android {
+    namespace 'sov.android'
+    compileSdk 34
+    defaultConfig {
+        applicationId 'com.sovereign.game'
+        minSdk 24
+        targetSdk 34
+        versionCode 1
+        versionName '1.0'
+    }
+    buildTypes {
+        release { minifyEnabled false; signingConfig signingConfigs.debug }
+    }
+    compileOptions { sourceCompatibility JavaVersion.VERSION_17; targetCompatibility JavaVersion.VERSION_17 }
+    lint { abortOnError false; checkReleaseBuilds false }
+}

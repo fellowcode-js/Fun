@@ -1,0 +1,7 @@
+package sov.awt;
+public class RenderingHints {
+    public static final Object KEY_ANTIALIASING = "aa", KEY_INTERPOLATION = "interp", KEY_TEXT_ANTIALIASING = "taa", KEY_RENDERING = "rend", KEY_STROKE_CONTROL = "sc",
+        VALUE_ANTIALIAS_ON = "on", VALUE_ANTIALIAS_OFF = "off", VALUE_TEXT_ANTIALIAS_ON = "ton", VALUE_TEXT_ANTIALIAS_OFF = "toff",
+        VALUE_INTERPOLATION_BILINEAR = "bil", VALUE_INTERPOLATION_NEAREST_NEIGHBOR = "nn", VALUE_INTERPOLATION_BICUBIC = "bic",
+        VALUE_RENDER_QUALITY = "q", VALUE_RENDER_SPEED = "s", VALUE_STROKE_PURE = "p";
+}

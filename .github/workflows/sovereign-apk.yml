@@ -1,0 +1,29 @@
+name: Build Sovereign APK
+on:
+  push:
+    paths: [ "sovereign-android/**", ".github/workflows/sovereign-apk.yml" ]
+  workflow_dispatch:
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: '17' }
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: '8.14.3' }
+      - name: Build
+        working-directory: sovereign-android
+        run: gradle --no-daemon assembleRelease
+      - run: cp sovereign-android/app/build/outputs/apk/release/app-release.apk Sovereign.apk
+      - uses: actions/upload-artifact@v4
+        with: { name: Sovereign-apk, path: Sovereign.apk }
+      - name: Publish release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: sovereign-latest
+          name: Sovereign APK
+          files: Sovereign.apk
+          prerelease: true
