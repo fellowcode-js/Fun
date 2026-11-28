@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- DOW icon: a gorilla face with glowing monster eyes, drawn as vector shapes -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android" android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
+    <path android:fillColor="#3A2618" android:pathData="M54,22 C72,22 82,34 82,50 C82,70 70,84 54,84 C38,84 26,70 26,50 C26,34 36,22 54,22 Z" />
+    <path android:fillColor="#2A1F1B" android:pathData="M30,40 C22,40 20,52 28,54 Z M78,40 C86,40 88,52 80,54 Z" />
+    <path android:fillColor="#4A3B33" android:pathData="M54,36 C66,36 72,44 72,54 C72,68 64,78 54,78 C44,78 36,68 36,54 C36,44 42,36 54,36 Z" />
+    <path android:fillColor="#1C1513" android:pathData="M38,46 C44,40 50,42 54,45 C58,42 64,40 70,46 L70,49 C64,46 58,47 54,50 C50,47 44,46 38,49 Z" />
+    <path android:fillColor="#FF2A14" android:pathData="M45,52 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0 M63,52 m-4,0 a4,4 0 1,0 8,0 a4,4 0 1,0 -8,0" />
+    <path android:fillColor="#FFEE66" android:pathData="M45,52 m-1.5,0 a1.5,1.5 0 1,0 3,0 a1.5,1.5 0 1,0 -3,0 M63,52 m-1.5,0 a1.5,1.5 0 1,0 3,0 a1.5,1.5 0 1,0 -3,0" />
+    <path android:fillColor="#3A2E29" android:pathData="M54,58 C63,58 66,63 66,67 C66,72 61,75 54,75 C47,75 42,72 42,67 C42,63 45,58 54,58 Z" />
+    <path android:fillColor="#0C0908" android:pathData="M50,63 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0 M58,63 m-2,0 a2,2 0 1,0 4,0 a2,2 0 1,0 -4,0" />
+    <path android:fillColor="#E8DCC0" android:pathData="M46,69 L48,74 L50,69 Z M58,69 L60,74 L62,69 Z" />
+</vector>

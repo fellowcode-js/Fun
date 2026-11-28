@@ -1,0 +1,42 @@
+# Doom on Wednesday: tests + screenshots (Linux, headless GL) and the Quest APK (NDK + OpenXR).
+name: DOW Quest build
+
+on:
+  push:
+    paths: ["DoomOnWednesday/**", ".github/workflows/dow-quest.yml"]
+  workflow_dispatch:
+
+jobs:
+  desktop-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install GL/EGL (Mesa llvmpipe)
+        run: sudo apt-get update && sudo apt-get install -y libegl-dev libgles-dev libegl-mesa0 libgl1-mesa-dri ninja-build
+      - name: Build
+        run: cmake -S DoomOnWednesday -B build -G Ninja -DCMAKE_BUILD_TYPE=Release && cmake --build build
+      - name: Physics + game rule tests
+        run: ./build/dow_tests
+      - name: Screenshots
+        run: mkdir -p shots && EGL_PLATFORM=surfaceless ./build/dow_desktop shots shots
+      - uses: actions/upload-artifact@v4
+        with: { name: dow-screenshots, path: shots/*.png }
+
+  quest-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with: { distribution: temurin, java-version: "17" }
+      - uses: gradle/actions/setup-gradle@v4
+        with: { gradle-version: "8.9" }
+      - name: Build APKs
+        working-directory: DoomOnWednesday/android
+        run: |
+          NDK_VER=$(basename "$ANDROID_NDK_LATEST_HOME")
+          echo "Using NDK $NDK_VER"
+          gradle assembleDebug assembleRelease -Pdow.ndk="$NDK_VER" --no-daemon --stacktrace
+      - uses: actions/upload-artifact@v4
+        with:
+          name: DoomOnWednesday-quest-apk
+          path: DoomOnWednesday/android/app/build/outputs/apk/**/*.apk
