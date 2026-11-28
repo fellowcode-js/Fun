@@ -24,6 +24,8 @@ jobs:
 
   quest-apk:
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-java@v4
@@ -40,3 +42,15 @@ jobs:
         with:
           name: DoomOnWednesday-quest-apk
           path: DoomOnWednesday/android/app/build/outputs/apk/**/*.apk
+      - name: Publish APK to the dow-apk branch (direct download, sideload-ready)
+        if: github.event_name == 'push'
+        run: |
+          set -e
+          APK=$(ls DoomOnWednesday/android/app/build/outputs/apk/release/*.apk | head -1)
+          mkdir -p /tmp/pub && cp "$APK" /tmp/pub/DoomOnWednesday.apk
+          cd /tmp/pub
+          printf 'Doom on Wednesday Quest APK\nCommit: %s\nBranch: %s\n' "$GITHUB_SHA" "$GITHUB_REF_NAME" > BUILD.txt
+          git init -q && git checkout -q -b dow-apk
+          git config user.name "dow-ci" && git config user.email "dow-ci@users.noreply.github.com"
+          git add DoomOnWednesday.apk BUILD.txt && git commit -q -m "APK for $GITHUB_SHA"
+          git push -f "https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/${{ github.repository }}.git" dow-apk
