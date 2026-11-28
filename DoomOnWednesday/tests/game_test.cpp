@@ -76,6 +76,14 @@ int main() {
     key("DOWN"); key("OPT2"); key("9");
     GCHECK(g.profile.g == 9, "lobby computer: colour channel set (g=%d)", g.profile.g); }
   { Game g; g.init(); Input in = rest(); run(g, in, 10);
+    int active = 0; for (auto& b : g.bots) active += b.active;
+    GCHECK(active == 0 && g.parts.size() == 1, "no bots in the base game (%d bots, %d players)", active, (int)g.parts.size());
+    g.ready = true; g.phaseT = 0.1f; run(g, in, 72 * 25);
+    GCHECK(g.myRole() == PR_MONSTER && g.form == g.myMonsterForm(), "solo: YOU are the monster (form %s)", formName(g.form));
+    GCHECK(g.phase == PH_HUNT, "solo round keeps going (free hunt) instead of ending instantly"); }
+  { Game g; g.init(); Input in = rest(); run(g, in, 10);
+    // stand-ins for other real players (online later): bot = -1, not local
+    for (int i = 0; i < 7; i++) { Participant p; p.name = "P" + std::to_string(i); g.parts.push_back(p); }
     // RNG pity: never the monster twice in a row, everyone gets a turn
     std::vector<int> lastMon(g.parts.size(), -9); int repeats = 0; std::vector<int> count(g.parts.size(), 0);
     for (int r = 0; r < 24; r++) {
@@ -88,17 +96,27 @@ int main() {
     GCHECK(repeats == 0, "pity RNG: nobody is the monster twice in a row (%d repeats)", repeats);
     GCHECK(minc >= 1, "pity RNG: every player gets a monster turn"); }
   { Game g; g.init(); Input in = rest(); run(g, in, 10);
+    g.role = 2; g.addBotPlayer(true); for (int i = 0; i < 5; i++) g.addBotPlayer(false);   // admin adds a monster bot + survivors
     g.profile.monsterMode = MM_ONE; g.ready = true; g.phaseT = 0.1f; run(g, in, 20);
     GCHECK(g.phase == PH_STARTING && g.zone == g.roundMap && g.roundMap >= 1, "READY starts a round on the voted map (map %d, zone %d)", g.roundMap, g.zone);
     int frames = 0; while (g.phase != PH_END && frames < 72 * 200) { run(g, in, 1); frames++; }
     int ghosts = 0; for (auto& p : g.parts) ghosts += p.role == PR_GHOST;
     GCHECK(g.phase == PH_END, "a full round plays out and ends (%s after %.0f s, %d caught)", g.winner == PR_MONSTER ? "monsters won" : "survivors won", frames / 72.f, ghosts);
-    GCHECK(ghosts > 0, "the monster actually hunts and catches players");
+    GCHECK(ghosts > 0, "admin monster bot actually hunts and catches survivors");
     run(g, in, 72 * 9); GCHECK(g.phase == PH_LOBBY && g.zone == ZONE_LOBBY, "after the round everyone returns to the main lobby"); }
   { Game g; g.init(); Input in = rest(); run(g, in, 10);
+    g.role = 2; g.addBotPlayer(true); for (int i = 0; i < 5; i++) g.addBotPlayer(false);
     g.profile.monsterMode = MM_INFECTION; g.ready = true; g.phaseT = 0.1f; int frames = 0, maxMon = 0;
     while (g.phase != PH_END && frames < 72 * 200) { run(g, in, 1); frames++; int m = 0; for (auto& p : g.parts) m += p.role == PR_MONSTER; maxMon = std::max(maxMon, m); }
-    GCHECK(maxMon >= 2, "infection: caught players turn into monsters (up to %d monsters)", maxMon); }
+    GCHECK(maxMon >= 3, "infection: caught players turn into monsters (up to %d monsters)", maxMon); }
+  { Game g; g.init(); g.loco.teleport(kSpawn, rest().head); Input in = rest(); run(g, in, 60);
+    for (int f : {FORM_WENDIGO, FORM_SMILER, FORM_CRAWLER}) { g.setForm(f); run(g, in, 200); }
+    float y0 = g.loco.headW.y; in.a = true; run(g, in, 1); in.a = false; float peak = y0; for (int i = 0; i < 60; i++) { run(g, in, 1); peak = std::max(peak, g.loco.headW.y); }
+    GCHECK(peak - y0 > 0.4f, "new monster ability: crawler leap (%.2f m)", peak - y0);
+    g.setForm(FORM_SMILER); g.abilityCd = 0; run(g, in, 5); in.a = true; run(g, in, 1); in.a = false; run(g, in, 2);
+    GCHECK(g.eventT[EV_BLACKOUT] > 0, "new monster ability: smiler scream kills the lights"); }
+  { Game g; g.init(); Input in = rest(); run(g, in, 5); g.role = 2; g.staffAction(8); run(g, in, 30);
+    GCHECK(g.zone == ZONE_ADMIN, "staff can go to the admin room (zone %d)", g.zone); }
   { Game g; g.init(); Input in = rest(); run(g, in, 10);
     int before = g.votes[2]; Vec3 b = votePadButton(2); g.loco.teleport(b + Vec3{0.7f, -b.y, 0}, in.head); run(g, in, 90);
     in.hand[1].q = Quat::axisAngle({1, 0, 0}, -PI / 2);

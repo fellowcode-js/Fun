@@ -86,61 +86,60 @@ struct Sim {
   }
 };
 
+static Vec3 nearestBot(Game& g, const Vec3& from, bool aliveOnly = true) {
+  Vec3 tgt = from + Vec3{0, 0, -2}; float bd = 1e9f;
+  for (auto& b : g.bots) if (b.active && (b.alive || !aliveOnly) && zoneAt(b.p) == g.zone) { float d = length2(b.p - from); if (d < bd) { bd = d; tgt = b.p + Vec3{0, 0.6f, 0}; } }
+  return tgt;
+}
+
+static void playRound(Sim& s, int map, int mode, int form, int survivorBots, int monsterBots, float secs) {
+  Game& g = s.g; g.goToLobby(); s.steps(5); g.clearBotPlayers();
+  for (int i = 0; i < survivorBots; i++) g.addBotPlayer(false);
+  for (int i = 0; i < monsterBots; i++) g.addBotPlayer(true);
+  for (int& v : g.votes) v = 0; g.votes[map - 1] = 9; g.profile.monsterMode = mode; g.profile.monsterForm = form;
+  g.ready = true; g.phaseT = 0.05f; s.steps(5); s.steps((int)(72 * secs));
+}
+
 static int shots(const std::string& out) {
   if (!initEGL()) return 1;
   Sim s; if (!s.sc.init()) return 1; s.tgt = makeTarget(1280, 720);
   s.g.init(); s.baseInput(); s.steps(120);
   Game& g = s.g; s.sc.showLocalBody = true; s.sc.showLocalHead = true;
   g.role = 2; g.profile.name = "KONG"; g.parts[0].name = "KONG";
-  const Vec3 LO = zoneInfo(ZONE_LOBBY).origin;
+  const Vec3 LO = zoneInfo(ZONE_LOBBY).origin, AO = zoneInfo(ZONE_ADMIN).origin;
 
-  // 1. main lobby: you on the stool at the computer
   g.page = CP_QUEUE; s.steps(4);
   s.shot(out + "/01_main_lobby.png", LO + Vec3{2.6f, 2.0f, 0.6f}, LO + Vec3{-0.3f, 0.9f, -3.0f}, 80);
-  // 2. the computer up close (first person, hands at the keyboard)
   s.sc.showLocalBody = false; s.sc.showLocalHead = false;
   s.baseInput(); s.in.hand[0].p = {-0.18f, 1.05f, -0.55f}; s.in.hand[1].p = {0.18f, 1.05f, -0.55f};
   s.in.hand[0].q = s.in.hand[1].q = Quat::axisAngle({1, 0, 0}, -0.9f); g.page = CP_MONSTER; s.steps(20);
-  { Vec3 e = g.loco.headW; s.shot(out + "/02_computer.png", e, e + Vec3{0, -0.35f, -1}, 85); }
-  // 3. map vote room through the door on your left
+  { Vec3 e = g.loco.headW; s.shot(out + "/02_computer_monster_picker.png", e, e + Vec3{0, -0.35f, -1}, 85); }
   s.sc.showLocalBody = true; s.sc.showLocalHead = true; s.baseInput();
-  g.votes[0] += 2; g.myVote = 2; g.votes[2]++; s.steps(30);
-  s.shot(out + "/03_map_vote.png", LO + Vec3{-6.2f, 1.7f, 2.6f}, LO + Vec3{-12.4f, 1.1f, -0.6f}, 80);
 
-  // rounds: survivor on each map, bots playing
-  struct Cap { int map; int mode; const char* file; Vec3 eyeOff, lookOff; float secs; };
-  Cap caps[] = {{ZONE_POOLROOMS, MM_TWO, "/04_poolrooms_round.png", {-2.5f, 1.2f, 2.5f}, {1.0f, -0.3f, -1.5f}, 22},
-                {ZONE_GARAGE, MM_INFECTION, "/05_garage_infection.png", {-2.5f, 0.8f, 2.0f}, {1.0f, -0.4f, -1.5f}, 25},
-                {ZONE_LIGHTSOUT, MM_SHAPESHIFTER, "/06_lights_out.png", {0.0f, 0.2f, 0.0f}, {0.0f, -0.2f, -3.0f}, 21}};
-  for (const Cap& c : caps) {
-    g.goToLobby(); s.steps(5);
-    for (int& v : g.votes) v = 0; g.votes[c.map - 1] = 9; g.profile.monsterMode = c.mode; g.parts[0].pity = 0;
-    g.ready = true; g.phaseT = 0.05f; s.steps(5);
-    s.steps((int)(72 * c.secs));
-    // look toward the nearest bot
-    Vec3 e = g.loco.headW, tgt = e + Vec3{0, 0, -2}; float bd = 1e9f;
-    for (auto& b : g.bots) if (b.active && b.part >= 0 && zoneAt(b.p) == g.zone) { float d = length2(b.p - e); if (d < bd) { bd = d; tgt = b.p + Vec3{0, 0.6f, 0}; } }
-    Vec3 eye = e + Vec3{0, 0.5f, 0} + normalize(e - tgt) * 2.2f; if (c.map == ZONE_LIGHTSOUT) eye = e + Vec3{0, 0.9f, 0} + normalize(e - tgt) * 1.2f;
-    s.shot(out + c.file, eye, tgt, 80);
-  }
-  // 7. backrooms round, you are the monster, jumpscare-free view of the hunt
-  g.goToLobby(); s.steps(5); for (int& v : g.votes) v = 0; g.votes[0] = 9; g.profile.monsterMode = MM_ONE; g.forceMeMonster = true;
-  g.ready = true; g.phaseT = 0.05f; s.steps(5); s.steps(72 * 17);
-  { Vec3 e = g.loco.headW, tgt = e + Vec3{0, 0, -2}; float bd = 1e9f;
-    for (auto& b : g.bots) if (b.active && b.part >= 0 && b.alive) { float d = length2(b.p - e); if (d < bd) { bd = d; tgt = b.p + Vec3{0, 0.5f, 0}; } }
-    s.shot(out + "/07_backrooms_you_are_monster.png", e + normalize(e - tgt) * 1.6f + Vec3{0.6f, 0.7f, 0}, tgt, 80); }
+  // admin room: every monster you can be, sculpted with the production-3d-kit
+  g.staffAction(8); s.baseInput(PI); s.steps(40);
+  s.shot(out + "/03_admin_lineup.png", AO + Vec3{0, 1.6f, 1.2f}, AO + Vec3{0, 0.95f, 5.1f}, 88);
+  s.shot(out + "/04_admin_lineup_left.png", AO + Vec3{-4.5f, 1.45f, 3.3f}, AO + Vec3{-4.5f, 1.0f, 5.1f}, 70);
+  s.shot(out + "/05_admin_lineup_right.png", AO + Vec3{3.6f, 1.45f, 3.3f}, AO + Vec3{3.6f, 1.0f, 5.1f}, 70);
+  s.shot(out + "/06_admin_console.png", AO + Vec3{0.5f, 1.7f, -3.2f}, AO + Vec3{0.0f, 0.85f, -5.0f}, 70);
+  g.addBotPlayer(false); g.addBotPlayer(false); s.steps(30);
 
-  // 8. the original chainsaw hand, slicing in the practice area
-  g.goToLobby(); s.steps(3); g.profile.mode = GM_REGULAR;   // stop the lobby timer
+  // you are the monster
+  playRound(s, ZONE_POOLROOMS, MM_ONE, FORM_WENDIGO, 4, 0, 24);
+  { Vec3 e = g.loco.headW, t = nearestBot(g, e); s.shot(out + "/07_you_are_the_wendigo.png", e + normalize(e - t) * 1.6f + Vec3{0.8f, 0.6f, 0}, e + Vec3{0, -0.3f, 0}, 75); }
+  playRound(s, ZONE_GARAGE, MM_INFECTION, FORM_SMILER, 4, 0, 22);
+  { Vec3 e = g.loco.headW; Vec3 f = g.loco.headQW.rotate({0, 0, -1}); f.y = 0; f = normalize(f, {0, 0, -1}); s.shot(out + "/08_you_are_the_smiler.png", e + f * 1.5f + Vec3{0.4f, 0.1f, 0}, e + Vec3{0, -0.25f, 0}, 70); }
+  playRound(s, ZONE_BACKROOMS, MM_ONE, FORM_CRAWLER, 3, 0, 20);
+  { Vec3 e = g.loco.headW; Vec3 f = g.loco.headQW.rotate({0, 0, -1}); f.y = 0; f = normalize(f, {0, 0, -1}); s.shot(out + "/09_you_are_the_crawler.png", e + f * 1.4f + Vec3{-0.5f, 0.3f, 0}, e + Vec3{0, -0.35f, 0}, 72); }
+
+  // the original chainsaw hand (practice area)
+  g.goToLobby(); s.steps(3); g.profile.mode = GM_REGULAR; g.clearBotPlayers();
   g.setForm(FORM_ROBOT); g.loco.teleport({-4.2f, 0, 1.6f}, s.in.head); s.baseInput(); s.steps(200);
   g.spawnBot(0, {-4.2f, 0, 0.75f});
   s.in.a = true; s.steps(2); s.in.a = false; s.steps(100);
   for (int i = 0; i < 26; i++) { float t = i / 25.f; s.in.hand[1].p = Vec3{0.55f - 0.9f * t, 1.15f, -0.55f}; s.in.hand[1].q = Quat::axisAngle({0, 0, 1}, -0.2f); s.steps(1); }
   s.steps(14);
-  { Vec3 h = g.loco.headW; s.shot(out + "/08_original_chainsaw.png", h + Vec3{-1.7f, 0.5f, -1.5f}, h + Vec3{0.1f, -0.55f, -0.55f}, 70); }
-  // 9. the four forms (practice area statues)
-  g.setForm(FORM_GORILLA); g.loco.teleport({3.0f, 0, -1.2f}, s.in.head); s.baseInput(); s.steps(30);
-  s.shot(out + "/09_forms.png", {3.6f, 1.45f, -1.25f}, {6.55f, 0.95f, -1.25f}, 78);
+  { Vec3 h = g.loco.headW; s.shot(out + "/10_original_chainsaw.png", h + Vec3{-1.7f, 0.5f, -1.5f}, h + Vec3{0.1f, -0.55f, -0.55f}, 70); }
   return 0;
 }
 

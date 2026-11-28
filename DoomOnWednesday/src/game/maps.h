@@ -8,7 +8,7 @@
 
 namespace dow {
 
-enum ZoneId { ZONE_LOBBY = 0, ZONE_BACKROOMS = 1, ZONE_POOLROOMS = 2, ZONE_GARAGE = 3, ZONE_LIGHTSOUT = 4, ZONE_COUNT = 5 };
+enum ZoneId { ZONE_LOBBY = 0, ZONE_BACKROOMS = 1, ZONE_POOLROOMS = 2, ZONE_GARAGE = 3, ZONE_LIGHTSOUT = 4, ZONE_ADMIN = 5, ZONE_COUNT = 6 };
 constexpr int kNumMaps = 4;   // zones 1..4 are votable maps
 enum TexId { TEX_WALLPAPER = 0, TEX_CARPET, TEX_CEILING, TEX_TILE, TEX_CONCRETE, TEX_WOOD, TEX_PLANKS, TEX_COUNT };
 
@@ -42,5 +42,7 @@ extern const int kNumLobbyKeys;
 Vec3 lobbyScreenCenter();
 Vec3 votePadButton(int map);    // map 0..3 -> vote button
 Vec3 readyButton();
+Vec3 adminSpawn();
+Vec3 adminButton(int row, int col);   // console on the admin room's north wall
 
 }  // namespace dow

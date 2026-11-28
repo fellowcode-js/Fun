@@ -38,6 +38,15 @@ bool Scene::init() {
   if (!R.init()) return false;
   for (int i = 0; i < KIT_COUNT; i++) {
     AvatarGpu& a = kits[i]; a.kit = buildAvatar(i);
+    // sculpted parts from the production-3d-kit override the procedural ones
+    std::vector<std::pair<std::string, Mesh>> parts;
+    if (kitAssetName(i) && loadModelMeshes(kitAssetName(i), parts)) {
+      for (auto& [name, m] : parts) {
+        if (name == "head") a.kit.head = m; else if (name == "torso") a.kit.torso = m;
+        else if (name == "upper") a.kit.upperArm = m; else if (name == "fore") a.kit.foreArm = m;
+        else if (name == "palm") { a.kit.palm[1] = m; a.kit.palm[0] = m; a.kit.palm[0].flipX(); }
+      }
+    } else if (kitAssetName(i)) std::fprintf(stderr, "DOW: sculpted avatar %s missing, using procedural\n", kitAssetName(i));
     a.head.upload(a.kit.head); a.torso.upload(a.kit.torso); a.upperArm.upload(a.kit.upperArm); a.foreArm.upload(a.kit.foreArm);
     for (int h = 0; h < 2; h++) { a.palm[h].upload(a.kit.palm[h]); a.finger[h].upload(a.kit.finger[h]); a.thumb[h].upload(a.kit.thumb[h]); }
   }
@@ -76,16 +85,16 @@ void Scene::buildStatic() {
   // button bases (caps are dynamic)
   for (int i = 0; i < kNumButtons; i++) {
     const ButtonDef& d = kButtons[i];
+    if (d.id == BTN_SPOT_A || d.id == BTN_SPOT_B || d.id == BTN_CLEAR_BOTS) continue;   // admin-only now
     if (d.id == BTN_RACK_SAW) { Mesh m; m.paint.c = rgb(0x1a1a20); m.box({-10.0f, 1.0f, -3.435f}, {0.13f, 0.13f, 0.01f}); st.append(m); continue; }
     float hx = (d.id >= 10) ? 0.15f : 0.13f; float bx = (d.id >= 10) ? kFormX : d.x; Mesh m; m.paint.c = rgb(0x1a1a20); m.box({bx, d.y - 0.045f, d.z}, {hx, 0.012f, hx * 0.85f}); st.append(m);
   }
   // keypad
   { Mesh m = props.keypadPlate; m.transform(0, Mat4::translate(kKeypadPos + Vec3{-0.0f, 0, 0})); st.append(m); }
   // form statues on the plinths (baked avatars, looking into the lobby)
-  static const uint32_t statueFur[4] = {0x5a3b24, 0x3a1414, 0x808080, 0x808080};
-  for (int f = 0; f < 4; f++) {
-    const AvatarKit& K = kits[f].kit; float s = f == 0 ? 1.0f : 1.35f; Vec3 fur = C3(rgb(statueFur[f]));
-    Quat q = Quat::yaw(PI / 2); Vec3 feet{6.55f, 0.16f, kFormZ[f]}; Vec3 head = feet + Vec3{0, 0.8f * s, 0};
+  static const uint32_t statueFur[KIT_COUNT] = {0x5a3b24, 0x3a1414, 0x808080, 0x808080, 0x808080, 0x808080, 0x808080};
+  auto statue = [&](Mesh& st, int f, Vec3 feet, Quat q, float s) {
+    const AvatarKit& K = kits[f].kit; Vec3 fur = C3(rgb(statueFur[f])); Vec3 head = feet + Vec3{0, 0.8f * s, 0};
     bake(st, K.head, Mat4::trs(head, q, s), fur);
     bake(st, K.torso, Mat4::trs(head + Vec3{0, -K.torsoDrop * s, 0}, q, s), fur);
     for (int h = 0; h < 2; h++) {
@@ -100,6 +109,18 @@ void Scene::buildStatic() {
       for (int i = 0; i < 4; i++) bake(st, K.finger[h], hm * Mat4::translate({K.knuckle.x * side, K.fingerY[i], K.knuckle.z}) * Mat4::rotate(Quat::yaw(side * 0.5f)), fur);
       bake(st, K.thumb[h], hm * Mat4::translate({K.thumbRoot.x * side, K.thumbRoot.y, K.thumbRoot.z}), fur);
     }
+  };
+  for (int f = 0; f < 4; f++) statue(st, f, {6.55f, 0.16f, kFormZ[f]}, Quat::yaw(PI / 2), f == 0 ? 1.0f : 1.35f);
+  { // admin room: every form on its own plinth, facing the console side of the room
+    Mesh ad, at; const Vec3 AO = zoneInfo(ZONE_ADMIN).origin; static const float sc[KIT_COUNT] = {1.0f, 1.4f, 1.4f, 1.4f, 1.55f, 1.3f, 1.2f};
+    static const char* nm[KIT_COUNT] = {"GORILLA", "MONSTER", "ROBOT", "STALKER", "WENDIGO", "SMILER", "CRAWLER"};
+    for (int f = 0; f < KIT_COUNT; f++) {
+      Vec3 feet = AO + Vec3{-5.4f + f * 1.8f, 0.21f, 5.1f}; statue(ad, f, feet, Quat::yaw(0), sc[f]);
+      addText(at, nm[f], AO + Vec3{-5.4f + f * 1.8f, 2.7f, 5.97f}, {-1, 0, 0}, {0, 1, 0}, 0.11f, rgb(0x66ccff));
+    }
+    addText(at, "ADMIN ROOM", AO + Vec3{0, 2.9f, -5.97f}, {1, 0, 0}, {0, 1, 0}, 0.2f, rgb(0x66ccff));
+    addText(at, "BOTS   /   FORMS   /   EVENTS   /   ROUND", AO + Vec3{0, 2.5f, -5.97f}, {1, 0, 0}, {0, 1, 0}, 0.07f, rgb(0xcfe8ff));
+    mAdminStatic.upload(ad); mAdminText.upload(at);
   }
   // signs: dark backing + pixel text
   auto sign = [&](const std::string& t, Vec3 at, Vec3 right, float charH, Color c, bool back = true) {
@@ -113,8 +134,6 @@ void Scene::buildStatic() {
   sign("DOOM ON WEDNESDAY", {0, 2.65f, 6.83f}, RZ, 0.22f, rgb(0xffd34d));
   sign("SWING YOUR ARMS: PUSH OFF FLOORS, WALLS & CEILINGS", {0, 2.2f, 6.83f}, RZ, 0.07f, rgb(0xffffff));
   sign("GRIP = GRAB / RIP    A = CHAINSAW / SPORES\nRIGHT STICK = SNAP TURN    NO STICK WALKING!", {0, 1.85f, 6.83f}, RZ, 0.055f, rgb(0xcfc7a0));
-  sign("TEST SPOT A\nSTANDING DUMMY", {-4.2f, 1.6f, 6.83f}, RZ, 0.08f, rgb(0xff9944));
-  sign("TEST SPOT B\nRUNNING BOT", {4.2f, 1.6f, 6.83f}, RZ, 0.08f, rgb(0x66aaff));
   static const char* fn[4] = {"GORILLA", "MONSTER", "ROBOT", "STALKER"};
   for (int f = 0; f < 4; f++) sign(fn[f], {6.83f, 2.75f, kFormZ[f]}, RNX, 0.1f, f == 3 ? rgb(0xbb66ff) : rgb(0xffffff));
   sign("BECOME A MONSTER: POKE THE BUTTONS", {6.83f, 2.45f, -1.25f}, RNX, 0.07f, rgb(0xff6655));
@@ -127,7 +146,7 @@ void Scene::buildStatic() {
   for (const auto& d : kButtons) {
     std::string l; Color c = rgb(0xffffff);
     switch (d.id) { case BTN_RESET: l = "RESET"; break; case BTN_CUBE: l = "CUBE"; break; case BTN_LIGHT: l = "LIGHT"; break; case BTN_SAW: l = "SAW"; break;
-      case BTN_CLEAR_BOTS: l = "CLEAR"; break; case BTN_SPOT_A: l = "DUMMY"; break; case BTN_SPOT_B: l = "RUNNER"; break; default: break; }
+      default: break; }
     if (!l.empty()) { Vec3 at{d.x, d.y - 0.03f, d.z - 0.14f}; addText(tx, l, at, RPZ, normalize(Vec3{0, 1, -0.0f}) * 0 + Vec3{0, 0.55f, 0.83f}, 0.03f, c); }
   }
   // keypad key labels
@@ -270,14 +289,10 @@ void Scene::build(const Game& g, const Input& in, float dt) {
     }
   }
   if (g.zone == ZONE_LOBBY) drawLobby(g);
-  if (g.zone == ZONE_BACKROOMS) {
-  R.add(mStatic, Mat4{});
-  R.add(mStaticText, Mat4{}, {1, 1, 1, 0}, MODE_TEXT, R.texFont);
-  // pedestal ring + kill counter
-  { Vec4 c = g.unlocked ? Vec4{0.3f, 1.f, 0.4f, 0.4f} : Vec4{1.f, 0.2f, 0.2f, 0.4f}; R.add(mPedRing, Mat4::translate({kFormX, 0, kFormZ[3]}), c); }
   // buttons
   { std::vector<Instance> caps;
     for (const Button& b : g.buttons) {
+      if (zoneAt(b.p) != g.zone) continue;
       Vec3 h = b.half; Vec3 p = b.p; if (b.id == BTN_RACK_SAW) p.z -= 0.02f * b.press; else p.y -= 0.018f * b.press;
       Vec4 col{b.col.r, b.col.g, b.col.b, 0.25f + 0.5f * b.press};
       if (b.id == BTN_FORM_STALKER && !g.unlocked && g.role < 1) col = {0.35f, 0.25f, 0.4f, 0.05f};
@@ -285,6 +300,17 @@ void Scene::build(const Game& g, const Input& in, float dt) {
       caps.push_back(makeInst(Mat4::trs(p, {}, h), col));
     }
     R.addInstanced(mButtonCap, caps); }
+  if (g.zone == ZONE_ADMIN) {
+    R.add(mAdminStatic, Mat4{}); R.add(mAdminText, Mat4{}, {1, 1, 1, 0}, MODE_TEXT, R.texFont);
+    if (!mAdminLabels.ok()) { Mesh t; for (const Button& b : g.buttons) if (b.id >= 100) addText(t, b.label, b.p + Vec3{0, 0.03f, 0.0f}, {1, 0, 0}, {0, 0, -1}, 0.024f, rgb(0xffffff), 1.0f); mAdminLabels.upload(t); }
+    R.add(mAdminLabels, Mat4{}, {1, 1, 1, 0}, MODE_TEXT, R.texFont);
+  }
+
+  if (g.zone == ZONE_BACKROOMS) {
+  R.add(mStatic, Mat4{});
+  R.add(mStaticText, Mat4{}, {1, 1, 1, 0}, MODE_TEXT, R.texFont);
+  // pedestal ring + kill counter
+  { Vec4 c = g.unlocked ? Vec4{0.3f, 1.f, 0.4f, 0.4f} : Vec4{1.f, 0.2f, 0.2f, 0.4f}; R.add(mPedRing, Mat4::translate({kFormX, 0, kFormZ[3]}), c); }
   // keypad keys
   { std::vector<Instance> keys; for (int k = 0; k < 12; k++) keys.push_back(makeInst(Mat4::translate(keypadKeyCenter(k)), k == 10 ? Vec4{1, 0.5f, 0.5f, 0.1f} : k == 11 ? Vec4{0.5f, 1, 0.5f, 0.1f} : Vec4{1, 1, 1, 0.05f})); R.addInstanced(mKeyCap, keys); }
   // dynamic text: OS screen, keypad display, kill counter
@@ -432,7 +458,8 @@ void Scene::drawLobby(const Game& g) {
       case CP_COLOR: std::snprintf(buf, sizeof buf, "COLOR\n\n%sRED   %d\n%sGREEN %d\n%sBLUE  %d\n\nOPT1-3 PICK, 0-9 SET", g.colorChan == 0 ? "> " : "  ", P.r, g.colorChan == 1 ? "> " : "  ", P.g, g.colorChan == 2 ? "> " : "  ", P.b); body = buf; break;
       case CP_VOICE: body = std::string("VOICE CHAT: ") + (P.voice ? "ON" : "OFF") + "\n\nOPT1 = ON\nOPT2 = OFF\n\n(VOICE NEEDS ONLINE PLAY)"; break;
       case CP_MODE: body = std::string("MODE: ") + gm[P.mode] + "\n\nOPT1 BE THE MONSTER\nOPT2 REGULAR (SOON)\nOPT3 DON'T SPLASH (SOON)\nOPT4 PRACTICE AREA"; break;
-      case CP_MONSTER: body = std::string("NEXT ROUND: ") + kModeLabel[P.monsterMode] + "\n\nOPT1 ONE MONSTER\nOPT2 TWO MONSTERS\nOPT3 INFECTION\nOPT4 SHAPESHIFTER  (B = SHIFT)"; break;
+      case CP_MONSTER: body = std::string("MODE: ") + kModeLabel[P.monsterMode] + "\nYOUR MONSTER: " + formName(g.myMonsterForm()) +
+                         "\n\nOPT1 ONE  OPT2 TWO  OPT3 INFECTION\nOPT4 SHAPESHIFTER (B = SHIFT)\n\n1 MONSTER  2 ROBOT  3 STALKER\n4 WENDIGO  5 SMILER  6 CRAWLER"; break;
       case CP_QUEUE: std::snprintf(buf, sizeof buf, "NEXT ROUND IN %s\nMODE: %s\nYOUR MONSTER CHANCE: %d%%\n\nOPT1 = READY (START NOW)", fmtTime(g.phaseT).c_str(), kModeLabel[P.monsterMode], (int)std::lround(g.monsterChance(0) * 100)); body = buf; break;
       case CP_STAFF:
         if (g.role < 1) body = "STAFF ONLY\n\nTYPE YOUR CODE + ENTER\n\n> " + std::string(g.typed.size(), '*') + "_";

@@ -17,6 +17,8 @@ static const ZoneInfo kZones[ZONE_COUNT] = {
      {1.1f, 0.62f, 0.22f}, 8, 8.f, 0.25f, {0.03f, 0.025f, 0.02f}, 2, 20, {0.04f, 0.035f, 0.03f}, {0.1f, 0.08f, 0.06f}, false, 0xff8822},
     {"LIGHTS OUT", "The power is gone. Bring a friend.", {0, 0, -200}, 18, 3.0f, TEX_WALLPAPER, TEX_CARPET, TEX_CEILING,
      {1.0f, 0.12f, 0.08f}, 0, 6.f, 0.3f, {0.004f, 0.003f, 0.003f}, 1, 13, {0.01f, 0.008f, 0.006f}, {0.02f, 0.015f, 0.01f}, true, 0xcc2222},
+    {"ADMIN ROOM", "staff only: test everything", {0, 0, 300}, 10, 3.6f, TEX_CONCRETE, TEX_TILE, TEX_CONCRETE,
+     {0.85f, 0.92f, 1.05f}, 4, 8.f, 0.0f, {0.05f, 0.055f, 0.07f}, 6, 30, {0.12f, 0.13f, 0.15f}, {0.3f, 0.32f, 0.36f}, false, 0x66ccff},
 };
 const ZoneInfo& zoneInfo(int z) { return kZones[(z >= 0 && z < ZONE_COUNT) ? z : 0]; }
 
@@ -77,6 +79,8 @@ Vec3 lobbyKey(int i) {
 Vec3 lobbyScreenCenter() { return kZones[ZONE_LOBBY].origin + Vec3{0, 1.22f, -3.536f}; }
 Vec3 votePadButton(int map) { return kZones[ZONE_LOBBY].origin + Vec3{-12.2f, 0.935f, -3.0f + map * 2.0f}; }
 Vec3 readyButton() { return kZones[ZONE_LOBBY].origin + Vec3{-7.0f, 0.935f, 3.2f}; }
+Vec3 adminSpawn() { return kZones[ZONE_ADMIN].origin + Vec3{0, 0, 1.0f}; }
+Vec3 adminButton(int row, int col) { return kZones[ZONE_ADMIN].origin + Vec3{-2.1f + col * 0.6f, 0.895f, -4.62f - row * 0.2f}; }
 Vec3 lobbySpawn() { return kZones[ZONE_LOBBY].origin + Vec3{0, 0.47f, -2.3f}; }
 float lobbySpawnYaw() { return 0; }
 
@@ -220,10 +224,28 @@ static void buildLightsOut(ZB& b) {
     P(&b.m->props, 0xff2010, 1.0f); b.m->props.box(b.O + l, {0.12f, 0.04f, 0.06f}); }
 }
 
+static void buildAdmin(ZB& b) {
+  const float S = 8, D = 6, H = 3.6f, T = 0.3f;
+  b.wall({-S - T, 0, -D - T}, {S + T, H, -D}); b.wall({-S - T, 0, D}, {S + T, H, D + T}); b.wall({-S - T, 0, -D}, {-S, H, D}); b.wall({S, 0, -D}, {S + T, H, D});
+  b.floorCeil(10, H, TEX_TILE, TEX_CONCRETE);
+  b.solid({0, 0.42f, -5.05f}, {2.7f, 0.42f, 0.55f}, SURF_METAL);                       // button console
+  for (int i = 0; i < 7; i++) b.solid({-5.4f + i * 1.8f, 0.1f, 5.1f}, {0.45f, 0.1f, 0.45f}, SURF_METAL);   // monster lineup plinths
+  if (Mesh* p = b.props()) {
+    const Vec3 O = b.O;
+    P(p, 0x22262c); p->box(O + Vec3{0, 0.42f, -5.05f}, {2.7f, 0.42f, 0.55f});
+    P(p, 0x3a4048); p->box(O + Vec3{0, 0.855f, -5.05f}, {2.72f, 0.015f, 0.57f});
+    P(p, 0x66ccff, 0.8f); p->box(O + Vec3{0, 0.75f, -4.495f}, {2.7f, 0.012f, 0.004f});
+    for (int r = 0; r < 4; r++) { P(p, r == 0 ? 0x44cc66 : r == 1 ? 0xcc4444 : r == 2 ? 0xffaa22 : 0x66ccff, 0.6f); p->box(O + Vec3{-2.62f, 0.872f, -4.62f - r * 0.2f}, {0.04f, 0.004f, 0.07f}); }
+    for (int i = 0; i < 7; i++) { P(p, 0x2a2e34); p->box(O + Vec3{-5.4f + i * 1.8f, 0.1f, 5.1f}, {0.45f, 0.1f, 0.45f}); P(p, 0x66ccff, 0.7f); p->box(O + Vec3{-5.4f + i * 1.8f, 0.205f, 5.1f}, {0.46f, 0.006f, 0.46f}); }
+    P(p, 0x15171a); for (int i = -3; i <= 3; i++) p->box(O + Vec3{i * 2.2f, 0.002f, 0.5f}, {0.9f, 0.002f, 0.9f});   // test spawn pads
+    for (float x = -6; x <= 6.01f; x += 4) for (float z = -4; z <= 4.01f; z += 4) b.light({x, H, z});
+  }
+}
+
 static void buildZone(int z, World* w, ZoneMeshes* m) {
   const ZoneInfo& Z = kZones[z]; ZB b{z, w, m, z == ZONE_BACKROOMS ? Vec3{} : Z.origin, uvScaleFor(Z.wallTex)};
   if (m) { m->walls.paint = Paint{}; m->trim.paint = Paint{z == ZONE_GARAGE ? rgb(0xc8a020) : z == ZONE_POOLROOMS ? rgb(0x8aa0a8) : rgb(0x6a4a28), 0, false, 0}; }
-  switch (z) { case ZONE_LOBBY: buildLobby(b); break; case ZONE_BACKROOMS: buildBackrooms(b); break; case ZONE_POOLROOMS: buildPoolrooms(b); break; case ZONE_GARAGE: buildGarage(b); break; default: buildLightsOut(b); break; }
+  switch (z) { case ZONE_LOBBY: buildLobby(b); break; case ZONE_BACKROOMS: buildBackrooms(b); break; case ZONE_POOLROOMS: buildPoolrooms(b); break; case ZONE_GARAGE: buildGarage(b); break; case ZONE_ADMIN: buildAdmin(b); break; default: buildLightsOut(b); break; }
 }
 
 void buildZoneColliders(World& w) { for (int z = 0; z < ZONE_COUNT; z++) buildZone(z, &w, nullptr); }

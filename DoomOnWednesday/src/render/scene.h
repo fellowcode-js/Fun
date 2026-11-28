@@ -37,7 +37,7 @@ class Scene {
   PropKit props; GpuMesh mLightPanel, mLightDiff, mPedRing, mButtonCap, mCube, mDrop, mDecal, mGibChunk, mGibBone, mKeyCap;
   struct ZoneGpu { GpuMesh walls, floor, ceiling, trim, props, water; std::vector<Vec3> lights; std::vector<float> flicker; };
   ZoneGpu zones[ZONE_COUNT];
-  GpuMesh mLobbyKeyCap, mLobbyScreen;
+  GpuMesh mLobbyKeyCap, mLobbyScreen, mAdminStatic, mAdminText, mAdminLabels;
   GpuMesh mStatic, mStaticText, mLobbyText, mLobbyDyn, mHud, mTags, mBanner; std::string lobbyCache, bannerKey, hudKey;
   GpuMesh mOSBg, mOSText, mDyn, mToast; std::string osKey, dynKey, toastKey;
   std::vector<Vec3> lightPos; std::vector<float> lightFlicker;

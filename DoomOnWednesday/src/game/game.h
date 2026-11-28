@@ -13,7 +13,8 @@ namespace dow {
 
 constexpr float kSawAnimSeconds = 1.2f;   // length of Robot_ToChainsaw / Robot_ToHand in robot_arm_right.glb
 
-enum Form { FORM_GORILLA = 0, FORM_MONSTER = 1, FORM_ROBOT = 2, FORM_STALKER = 3 };
+enum Form { FORM_GORILLA = 0, FORM_MONSTER = 1, FORM_ROBOT = 2, FORM_STALKER = 3, FORM_WENDIGO = 4, FORM_SMILER = 5, FORM_CRAWLER = 6, FORM_COUNT = 7 };
+const char* formName(int f);
 enum GameMode { GM_BE_THE_MONSTER = 0, GM_REGULAR = 1, GM_DONT_SPLASH = 2 };
 enum MonsterMode { MM_ONE = 0, MM_TWO = 1, MM_INFECTION = 2, MM_SHAPESHIFTER = 3 };
 enum RoundPhase { PH_LOBBY = 0, PH_STARTING, PH_HIDE, PH_HUNT, PH_END };
@@ -28,6 +29,7 @@ struct Profile {
   bool voice = true;
   std::string room = "PUBLIC";
   int mode = GM_BE_THE_MONSTER, monsterMode = MM_ONE;
+  int monsterForm = FORM_MONSTER;   // what you turn into when you are the monster
 };
 
 // One player in a round: you (local) or a bot standing in for an online player.
@@ -36,6 +38,7 @@ struct Participant {
   int role = PR_SURVIVOR; float pity = 1;   // monster-pick weight: 0 right after being the monster, +1 every round after
   bool shifted = false; float shiftCd = 0;  // shapeshifter
   Color fur; int vote = -1; int catches = 0;
+  bool botMonster = false;          // admin-added bot that always plays the monster
 };
 
 enum Sfx { SFX_TAP, SFX_THUD, SFX_GORE, SFX_SLICE, SFX_BEEP, SFX_DENY, SFX_RIP, SFX_SPORE, SFX_SAW_ON, SFX_SAW_OFF, SFX_UNLOCK, SFX_PUNCH, SFX_KEY, SFX_SCREAM, SFX_ROUND, SFX_EVENT };
@@ -136,12 +139,17 @@ class Game {
   std::vector<Participant> parts;   // [0] is you
   int roundsPlayed = 0; std::string banner; float bannerT = 0; int winner = -1;
   float jumpscare = 0; bool forceMeMonster = false; int colorChan = 0;
+  float abilityCd = 0; int survivorsAtStart = 0;
+  void addBotPlayer(bool monster);
+  void clearBotPlayers();
+  void useAbility();
   float eventT[EV_COUNT] = {0, 0, 0, 0};
   Nav nav;
 
   Color furColor() const;
   float monsterChance(int participant) const;   // 0..1, what the lobby board shows
   int myRole() const { return parts.empty() ? PR_SURVIVOR : parts[0].role; }
+  int myMonsterForm() const { return (profile.monsterForm == FORM_STALKER && !unlocked && role < 1) || profile.monsterForm <= FORM_GORILLA || profile.monsterForm >= FORM_COUNT ? FORM_MONSTER : profile.monsterForm; }
   void computerKey(const std::string& key, int hand);
   void startRound();
   void endRound(int winners);
@@ -195,7 +203,12 @@ Vec3 keypadKeyCenter(int i);  // 0-9, 10 = clear, 11 = enter
 
 // Button ids (match the original DOW map)
 enum ButtonId { BTN_RESET = 1, BTN_CUBE = 2, BTN_LIGHT = 3, BTN_SAW = 4, BTN_SPOT_A = 5, BTN_SPOT_B = 6, BTN_CLEAR_BOTS = 7,
-                BTN_FORM_GORILLA = 10, BTN_FORM_MONSTER = 11, BTN_FORM_ROBOT = 12, BTN_RACK_SAW = 13, BTN_FORM_STALKER = 14, BTN_TO_LOBBY = 15 };
+                BTN_FORM_GORILLA = 10, BTN_FORM_MONSTER = 11, BTN_FORM_ROBOT = 12, BTN_RACK_SAW = 13, BTN_FORM_STALKER = 14, BTN_TO_LOBBY = 15,
+                // admin room console
+                BTN_A_SURVIVOR_BOT = 100, BTN_A_MONSTER_BOT, BTN_A_DUMMY, BTN_A_RUNNER, BTN_A_CLEAR_BOTS,
+                BTN_A_FORM0 = 110,   // + form index (0..6), 117 = saw hand
+                BTN_A_EVENT0 = 120,  // + event index, 124 = clear gore
+                BTN_A_START = 130, BTN_A_END, BTN_A_LOBBY, BTN_A_DEN };
 
 // Staff codes are never stored, only sha256(sha256(code)) in hex. Change them in staff_codes.h.
 std::string sha256hex(const std::string& s);

@@ -41,16 +41,30 @@ EGL_PLATFORM=surfaceless ./build/dow_desktop shots shots   # renders 8 screensho
 OPT4 on the GAME MODE page takes you to the practice area (forms, test dummies, Mushroom OS, mod den).
 
 **Be the Monster**
-- Sub-modes: One Monster, Two Monsters, Infection (caught players turn), Shapeshifter (look like a gorilla, **B** to shift).
-- Monster RNG: right after you were the monster your chance is 0%. It rises every round you aren't, so nobody is stuck as monster or never gets a turn.
-- Each round: get ready, then hide (monsters are blind), then hunt for 2:30. Catch by touching; climbing out of reach saves you.
-  Caught players become ghosts (or monsters in Infection). Then everyone goes back to the lobby.
-- **Maps**: The Backrooms, The Poolrooms, Parking Garage, Lights Out (generated maze, head-lamp only).
-- Bots fill the room until online play exists. They path through the maps; monsters hunt and survivors flee.
+- You are the monster. The base game has **no bots**. The monster is picked only from real players with a pity RNG:
+  0% right after you were the monster, rising every round you aren't. Offline you are the only player, so you always hunt (free hunt until the timer ends).
+- Pick your monster on the computer's MONSTER MODE page: 1 Monster, 2 Robot, 3 Stalker (5 kills), 4 Wendigo, 5 Smiler, 6 Crawler.
+- Abilities (**A**): Monster roar (shove), Robot chainsaw, Stalker spore burst, Wendigo dash, Smiler lights-out scream, Crawler leap (sticky hands too).
+- Sub-modes: One Monster, Two Monsters, Infection, Shapeshifter (look like a gorilla, **B** to shift).
+- Rounds: get ready, hide (monsters are blind), then hunt for 2:30. Caught players become ghosts (or monsters in Infection).
+- Maps: The Backrooms, The Poolrooms, Parking Garage, Lights Out.
 
-**Staff** (code on the STAFF page, or the keypad in the practice area): blackout, low gravity, blood moon, giant mode,
-start/end round, monster rush, bot party, monster next round (owner), unlock stalker (owner), clear gore, mod den.
-Default codes: owner `246810`, mod `135790`. **Change them** in `src/game/staff_codes.h`.
+**Admin room** (staff only: STAFF page on the computer, then key **8**). It has a console with four rows of buttons:
+- BOTS: survivor bot, monster bot, dummy, runner, clear bots. Bots exist only when staff add them.
+- FORMS: every form, plus the saw hand.
+- EVENTS: blackout, low gravity, blood moon, giant, clear gore.
+- ROUND: start, end, lobby, mod den.
+
+All seven forms stand on plinths in the admin room for a close look.
+
+**Staff codes** (type on the STAFF page, then ENTER; or use the keypad in the practice area). Defaults: owner `246810`, mod `135790`.
+Change them in `src/game/staff_codes.h` (`./build/dow_desktop hash <code>` prints the hash).
+Staff page keys: OPT1 blackout, OPT2 low gravity, OPT3 blood moon, OPT4 giant; 1 start round, 2 end round, 3 monster rush, 4 add 4 survivor bots,
+5 you are monster next round (owner), 6 unlock stalker (owner), 7 clear gore, 8 admin room, 9 back to lobby.
+
+**Models**: the characters are sculpted with the production-3d-kit by `tools/model_studio.py`
+(signed-distance sculpting, kit appendages for eyes, horns, fangs and claws, baked occlusion, decimated to about 15k triangles each).
+Regenerate with `PYTHONPATH=<kit> python3 tools/model_studio.py android/app/src/main/assets`.
 
 **The chainsaw hand** is your original `robot_arm_right.glb` with its own animations.
 `tools/glb_to_dowm.py` converts it into the runtime format in `android/app/src/main/assets/`.

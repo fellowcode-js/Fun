@@ -10,6 +10,9 @@ struct ModelNode { std::string name; int parent = -1, mesh = -1; Vec3 t; Quat r;
 struct ModelAnimChannel { int node, path; std::vector<float> times, values; };
 struct ModelAnim { std::string name; float duration = 0; std::vector<ModelAnimChannel> ch; };
 
+// CPU meshes of a .dowm file by node name (node transforms baked in). Used for the sculpted avatar parts.
+bool loadModelMeshes(const std::string& assetName, std::vector<std::pair<std::string, Mesh>>& out);
+
 class ModelAsset {
  public:
   bool load(const std::string& assetName, Renderer& R);

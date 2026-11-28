@@ -10,6 +10,30 @@ namespace dow {
 
 static const int UNLOCK_KILLS = 5;
 
+const char* formName(int f) { static const char* n[FORM_COUNT] = {"GORILLA", "MONSTER", "ROBOT", "STALKER", "WENDIGO", "SMILER", "CRAWLER"}; return f >= 0 && f < FORM_COUNT ? n[f] : "?"; }
+
+// A button for the new monsters (robot = chainsaw and stalker = spores are handled in updateSaw)
+void Game::useAbility() {
+  if (abilityCd > 0) { say("ABILITY RECHARGING"); return; }
+  Vec3 f = loco.headQW.rotate({0, 0, -1}); f.y = 0; f = normalize(f, {0, 0, -1});
+  switch (form) {
+    case FORM_MONSTER:   // roar: shove everything near you away
+      for (auto& b : bots) if (b.active && b.alive && length(b.p - loco.headW) < 3.5f) { b.knock = normalize(Vec3{b.p.x - loco.headW.x, 0, b.p.z - loco.headW.z}, {1, 0, 0}) * 6.f; b.hitFlash = 0.4f; }
+      sfx(SFX_SCREAM, loco.headW, 0.9f, 0.55f); buzz(0, 0.8f, 0.3f); buzz(1, 0.8f, 0.3f); abilityCd = 5; break;
+    case FORM_WENDIGO:   // dash
+      loco.vel += f * (6.5f * loco.scale) + Vec3{0, 1.6f, 0}; for (auto& H : loco.hand) H.contact = false;
+      sfx(SFX_SPORE, loco.headW, 0.8f, 0.6f); abilityCd = 3; break;
+    case FORM_SMILER:    // scream: the lights die around you for a few seconds
+      eventT[EV_BLACKOUT] = std::max(eventT[EV_BLACKOUT], 6.f); sfx(SFX_SCREAM, loco.headW, 1, 1.4f);
+      for (auto& b : bots) if (b.active && b.alive && length(b.p - loco.headW) < 6) b.hitFlash = 1.0f;
+      abilityCd = 12; break;
+    case FORM_CRAWLER:   // leap
+      loco.vel = f * (4.f * loco.scale) + Vec3{0, 4.6f, 0}; for (auto& H : loco.hand) H.contact = false;
+      sfx(SFX_THUD, loco.headW, 0.8f, 0.6f); abilityCd = 2.5f; break;
+    default: break;
+  }
+}
+
 Vec3 osTileCenter(int i) {
   int col = i % kOSCols, row = i / kOSCols;
   return {-13.04f, 1.14f - row * 0.16f, (1 - col) * 0.30f};   // monitor faces +X; columns run toward -Z (player's right)
@@ -33,12 +57,23 @@ void Game::init() {
                                {BTN_FORM_GORILLA, 0x44cc66, "GORILLA"}, {BTN_FORM_MONSTER, 0xcc3344, "MONSTER"}, {BTN_FORM_ROBOT, 0xffaa22, "ROBOT"},
                                {BTN_FORM_STALKER, 0xaa33ff, "STALKER"}, {BTN_RACK_SAW, 0xff3322, "WEAR"}};
   for (int i = 0; i < kNumButtons; i++) {
-    const ButtonDef& d = kButtons[i]; Button b; b.id = d.id; b.p = {d.x, d.y - 0.025f, d.z};
+    const ButtonDef& d = kButtons[i];
+    if (d.id == BTN_SPOT_A || d.id == BTN_SPOT_B || d.id == BTN_CLEAR_BOTS) continue;   // bots are admin-only now
+    Button b; b.id = d.id; b.p = {d.x, d.y - 0.025f, d.z};
     for (const Look& l : looks) if (l.id == d.id) { b.col = rgb(l.c); b.label = l.l; }
     if (d.id >= 10 && d.id <= 14 && d.id != BTN_RACK_SAW) { b.half = {0.11f, 0.03f, 0.11f}; b.p.y = 0.985f; b.p.x = kFormX; }
     if (d.id == BTN_RACK_SAW) { b.p = {-10.0f, 1.0f, -3.40f}; b.half = {0.09f, 0.09f, 0.035f}; }
     buttons.push_back(b);
   }
+  // admin room console: 4 rows (bots, forms, events, round)
+  { struct A { int row, col, id; uint32_t c; const char* l; };
+    static const A adm[] = {
+      {0, 0, BTN_A_SURVIVOR_BOT, 0x44cc66, "SURVIVOR\nBOT"}, {0, 1, BTN_A_MONSTER_BOT, 0xcc3333, "MONSTER\nBOT"}, {0, 2, BTN_A_DUMMY, 0xff8833, "DUMMY"}, {0, 3, BTN_A_RUNNER, 0xff8833, "RUNNER"}, {0, 4, BTN_A_CLEAR_BOTS, 0xaa44ff, "CLEAR\nBOTS"},
+      {1, 0, BTN_A_FORM0 + 0, 0x8a5a2a, "GORILLA"}, {1, 1, BTN_A_FORM0 + 1, 0xcc3344, "MONSTER"}, {1, 2, BTN_A_FORM0 + 2, 0xffaa22, "ROBOT"}, {1, 3, BTN_A_FORM0 + 3, 0xaa33ff, "STALKER"},
+      {1, 4, BTN_A_FORM0 + 4, 0xe4dcc6, "WENDIGO"}, {1, 5, BTN_A_FORM0 + 5, 0xffffff, "SMILER"}, {1, 6, BTN_A_FORM0 + 6, 0x884422, "CRAWLER"}, {1, 7, BTN_A_FORM0 + 7, 0xff3322, "SAW\nHAND"},
+      {2, 0, BTN_A_EVENT0 + 0, 0x333333, "BLACKOUT"}, {2, 1, BTN_A_EVENT0 + 1, 0x66ccff, "LOW\nGRAVITY"}, {2, 2, BTN_A_EVENT0 + 2, 0xaa1111, "BLOOD\nMOON"}, {2, 3, BTN_A_EVENT0 + 3, 0x44aa44, "GIANT"}, {2, 4, BTN_A_EVENT0 + 4, 0xdddddd, "CLEAR\nGORE"},
+      {3, 0, BTN_A_START, 0x33dd55, "START\nROUND"}, {3, 1, BTN_A_END, 0xdd3333, "END\nROUND"}, {3, 2, BTN_A_LOBBY, 0xffb347, "LOBBY"}, {3, 3, BTN_A_DEN, 0x9955ff, "MOD\nDEN"}};
+    for (const A& a : adm) { Button b; b.id = a.id; b.p = adminButton(a.row, a.col); b.half = {0.11f, 0.025f, 0.065f}; b.col = rgb(a.c); b.label = a.l; buttons.push_back(b); } }
   { Button b; b.id = BTN_TO_LOBBY; b.p = {-1.2f, 0.935f, -5.2f}; b.col = rgb(0xffb347); b.label = "LOBBY"; buttons.push_back(b); }
   resetCubes();
   for (auto& b : bots) b = Bot{};
@@ -82,8 +117,9 @@ void Game::setForm(int f) {
   if (f == form) return;
   form = f;
   if (!hasSaw()) { sawState = 0; sawT = 0; }
-  targetScale = form == FORM_GORILLA ? 1.0f : 1.4f;
-  static const char* names[] = {"GORILLA", "MONSTER FORM", "ROBOT FORM  (A = chainsaw)", "STALKER FORM  (A = spore burst)"};
+  static const float scales[FORM_COUNT] = {1.0f, 1.4f, 1.4f, 1.4f, 1.55f, 1.3f, 1.2f};
+  targetScale = scales[f];
+  static const char* names[FORM_COUNT] = {"GORILLA", "MONSTER  (A = ROAR)", "ROBOT  (A = CHAINSAW)", "STALKER  (A = SPORE BURST)", "WENDIGO  (A = DASH)", "SMILER  (A = LIGHTS OUT SCREAM)", "CRAWLER  (A = LEAP, STICKY HANDS)"};
   say(names[f]); sfx(SFX_UNLOCK, loco.headW, 0.6f, f == FORM_GORILLA ? 1.3f : 0.8f);
 }
 
@@ -119,7 +155,10 @@ void Game::update(const Input& in) {
   float s = loco.scale + (targetScale - loco.scale) * std::min(1.f, dt * 3.f);
   if (std::fabs(s - targetScale) < 0.002f) s = targetScale;
   loco.setScale(s, in.head);
-  loco.P.speedMul = speedSetting * (form == FORM_STALKER ? 1.25f : form >= 1 ? 1.12f : 1.f);
+  static const float speeds[FORM_COUNT] = {1.f, 1.12f, 1.12f, 1.25f, 1.3f, 1.15f, 1.2f};
+  loco.P.speedMul = speedSetting * speeds[form];
+  loco.P.unstickLift = form == FORM_CRAWLER ? 0.02f : 0.004f;   // crawler hands cling to walls
+  loco.P.maxStretch = form == FORM_CRAWLER ? 0.45f : 0.30f;
 
   // snap turn (right stick), 30 degrees
   snapCd -= dt;
@@ -129,7 +168,7 @@ void Game::update(const Input& in) {
   lastHead = in.head;
   world.activeZone = zone = zoneAt(loco.headW);
   loco.P.gravity = eventT[EV_LOW_GRAVITY] > 0 ? 3.2f : 9.81f;
-  if (eventT[EV_GIANT] > 0) targetScale = 2.2f; else if (targetScale > 2) targetScale = form == FORM_GORILLA ? 1.f : 1.4f;
+  if (eventT[EV_GIANT] > 0) targetScale = 2.2f; else if (targetScale > 2) { static const float sc[FORM_COUNT] = {1.0f, 1.4f, 1.4f, 1.4f, 1.55f, 1.3f, 1.2f}; targetScale = sc[form]; }
   loco.step(dt, in.head, in.hand, world, role);
   world.activeZone = zone = zoneAt(loco.headW);
   for (int h = 0; h < 2; h++) {
@@ -175,7 +214,8 @@ void Game::updatePlatforms(const Input& in) {
 void Game::updateSaw(const Input& in, float dt) {
   bool a = in.a;
   if (a && !aPrev) {
-    if (form == FORM_STALKER) {
+    if (form != FORM_ROBOT && form != FORM_STALKER && form != FORM_GORILLA && !csaw) useAbility();
+    else if (form == FORM_STALKER) {
       if (sporeCd <= 0) {
         sporeCd = 4; buzz(1, 0.8f, 0.08f); sporeFx = 0.6f; sporeFxPos = loco.headW - Vec3{0, 0.2f, 0}; sfx(SFX_SPORE, sporeFxPos, 1, 1);
         for (auto& b : bots) if (b.active && b.alive) {
@@ -188,7 +228,7 @@ void Game::updateSaw(const Input& in, float dt) {
       else if (sawState == 2) { sawState = 3; sfx(SFX_SAW_OFF, loco.hand[1].phys); }
     }
   }
-  aPrev = a; sporeCd -= dt;
+  aPrev = a; sporeCd -= dt; abilityCd -= dt;
   if (!hasSaw()) { sawState = 0; sawT = std::max(0.f, sawT - dt * 3); }
   // transitions last exactly as long as the original model's animations (Robot_ToChainsaw / Robot_ToHand)
   if (sawState == 1) { sawT += dt / kSawAnimSeconds; if (sawT >= 1) { sawT = 1; sawState = 2; } }
@@ -420,6 +460,9 @@ void Game::press(int id, int h) {
     case BTN_SPOT_B: spawnBot(1, kSpotB); say("RUNNER SPAWNED"); break;
     case BTN_CLEAR_BOTS: clearBots(); say("BOTS CLEARED"); break;
     case BTN_FORM_GORILLA: setForm(FORM_GORILLA); break;
+    case BTN_A_FORM0 + 0: case BTN_A_FORM0 + 1: case BTN_A_FORM0 + 2: case BTN_A_FORM0 + 3: case BTN_A_FORM0 + 4: case BTN_A_FORM0 + 5: case BTN_A_FORM0 + 6:
+      setForm(id - BTN_A_FORM0); break;
+    case BTN_A_EVENT0 + 0: case BTN_A_EVENT0 + 1: case BTN_A_EVENT0 + 2: case BTN_A_EVENT0 + 3: triggerEvent(id - BTN_A_EVENT0); break;
     case BTN_FORM_MONSTER: setForm(FORM_MONSTER); break;
     case BTN_FORM_ROBOT: setForm(FORM_ROBOT); break;
     case BTN_FORM_STALKER:
@@ -427,9 +470,20 @@ void Game::press(int id, int h) {
       else { char t[64]; std::snprintf(t, sizeof t, "STALKER LOCKED: %d MORE KILLS", UNLOCK_KILLS - kills); say(t); sfx(SFX_DENY, at); buzz(h, 1, 0.15f); }
       break;
     case BTN_TO_LOBBY:
-      if (phase == PH_LOBBY) { loco.teleport(lobbySpawn(), lastHead); loco.yaw = lobbySpawnYaw(); say("MAIN LOBBY"); }
+      if (phase == PH_LOBBY) { loco.yaw = lobbySpawnYaw(); loco.teleport(lobbySpawn(), lastHead); say("MAIN LOBBY"); }
       else say("A ROUND IS RUNNING - WAIT FOR IT TO END");
       break;
+    case BTN_A_SURVIVOR_BOT: addBotPlayer(false); break;
+    case BTN_A_MONSTER_BOT: addBotPlayer(true); break;
+    case BTN_A_DUMMY: spawnBot(0, adminSpawn() + Vec3{-2.2f, 0, -1.0f}); say("DUMMY"); break;
+    case BTN_A_RUNNER: spawnBot(1, adminSpawn() + Vec3{2.2f, 0, -1.0f}); say("RUNNER"); break;
+    case BTN_A_CLEAR_BOTS: clearBots(); clearBotPlayers(); say("ALL BOTS REMOVED"); break;
+    case BTN_A_FORM0 + 7: if (role >= 1) { csaw = !csaw; say(csaw ? "CHAINSAW HAND ON  (A)" : "chainsaw hand off"); } break;
+    case BTN_A_EVENT0 + 4: gore.clear(); say("GORE CLEARED"); break;
+    case BTN_A_START: staffAction(1); break;
+    case BTN_A_END: staffAction(2); break;
+    case BTN_A_LOBBY: staffAction(9); break;
+    case BTN_A_DEN: loco.teleport(kDenCenter + Vec3{0, 0, 1.5f}, lastHead); say("MOD DEN"); break;
     case BTN_RACK_SAW:
       if (role >= 1) { csaw = !csaw; say(csaw ? "CHAINSAW HAND ON  (A)" : "chainsaw hand off"); if (!hasSaw()) sawState = 0; }
       else { say("MODERATORS ONLY"); sfx(SFX_DENY, at); buzz(h, 1, 0.15f); }

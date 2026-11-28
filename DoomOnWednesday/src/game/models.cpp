@@ -183,8 +183,26 @@ static AvatarKit stalker() {
   return k;
 }
 
+// New monsters: proportions + hands here; head/torso/arms/palm come from the sculpted assets.
+static AvatarKit newMonster(float upper, float fore, float hand, uint32_t skin, uint32_t back, float fingerLen, float fingerR, bool claws, uint32_t clawCol) {
+  AvatarKit k = monster(); k.upperLen = upper; k.foreLen = fore; k.handScale = hand;
+  buildHand(k, skin, back, false, fingerLen, fingerR, claws, clawCol);
+  return k;
+}
+
 AvatarKit buildAvatar(int form) {
-  switch (form) { case KIT_MONSTER: return monster(); case KIT_ROBOT: return robot(); case KIT_STALKER: return stalker(); default: return gorilla(); }
+  switch (form) {
+    case KIT_MONSTER: return monster(); case KIT_ROBOT: return robot(); case KIT_STALKER: return stalker();
+    case KIT_WENDIGO: return newMonster(0.55f, 0.55f, 1.35f, 0x3a302a, 0x5a4a40, 0.1f, 0.009f, true, 0xe4dcc6);
+    case KIT_SMILER: return newMonster(0.5f, 0.5f, 1.3f, 0x050506, 0x050506, 0.11f, 0.009f, true, 0x050506);
+    case KIT_CRAWLER: return newMonster(0.47f, 0.47f, 1.3f, 0x1a1612, 0x3a2a1e, 0.09f, 0.011f, true, 0x0a0806);
+    default: return gorilla();
+  }
+}
+
+const char* kitAssetName(int form) {
+  static const char* n[KIT_COUNT] = {"avatar_gorilla.dowm", "avatar_monster.dowm", nullptr, "avatar_stalker.dowm", "avatar_wendigo.dowm", "avatar_smiler.dowm", "avatar_crawler.dowm"};
+  return form >= 0 && form < KIT_COUNT ? n[form] : nullptr;
 }
 
 // --------------------------------------------------------------------------------------------- props

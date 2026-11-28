@@ -18,7 +18,9 @@ struct AvatarKit {
   float handScale = 1.0f;
 };
 
-enum FormKit { KIT_GORILLA = 0, KIT_MONSTER, KIT_ROBOT, KIT_STALKER, KIT_COUNT };
+enum FormKit { KIT_GORILLA = 0, KIT_MONSTER, KIT_ROBOT, KIT_STALKER, KIT_WENDIGO, KIT_SMILER, KIT_CRAWLER, KIT_COUNT };
+// Sculpted meshes made with the production-3d-kit (tools/model_studio.py) replace these parts at load time.
+const char* kitAssetName(int form);   // "avatar_gorilla.dowm" ... or nullptr (robot stays hard-surface)
 AvatarKit buildAvatar(int form);
 
 // The chainsaw hand is NOT generated: it is the original robot_arm_right model (assets/robot_arm_right.dowm).

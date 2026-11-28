@@ -17,6 +17,26 @@ struct Reader {
 };
 }
 
+bool loadModelMeshes(const std::string& assetName, std::vector<std::pair<std::string, Mesh>>& out) {
+  std::vector<uint8_t> data; if (!readAsset(assetName, data)) return false;
+  Reader rd(data); char magic[4]; rd.raw(magic, 4); if (std::memcmp(magic, "DOWM", 4) || rd.u() != 1) return false;
+  struct N { std::string name; int parent, mesh; Vec3 t; Quat r; Vec3 s; }; std::vector<N> nodes(rd.u());
+  for (auto& n : nodes) { n.name = rd.name(); n.parent = rd.i(); n.mesh = rd.i(); n.t = {rd.f(), rd.f(), rd.f()}; n.r = {rd.f(), rd.f(), rd.f(), rd.f()}; n.s = {rd.f(), rd.f(), rd.f()}; }
+  struct MR { uint32_t v0, vn, i0, in; int mat; }; std::vector<MR> mr(rd.u());
+  for (auto& m : mr) { m.v0 = rd.u(); m.vn = rd.u(); m.i0 = rd.u(); m.in = rd.u(); m.mat = rd.i(); }
+  std::vector<Vertex> verts(rd.u()); rd.raw(verts.data(), verts.size() * sizeof(Vertex));
+  std::vector<uint32_t> idx(rd.u()); rd.raw(idx.data(), idx.size() * 4);
+  if (rd.bad) return false;
+  for (auto& n : nodes) {
+    if (n.mesh < 0 || n.mesh >= (int)mr.size()) continue; const MR& m = mr[n.mesh]; Mesh out1;
+    out1.v.assign(verts.begin() + m.v0, verts.begin() + m.v0 + m.vn);
+    for (uint32_t k = 0; k < m.in; k++) out1.idx.push_back(idx[m.i0 + k] - m.v0);
+    out1.transform(0, Mat4::trs(n.t, n.r, n.s));
+    out.push_back({n.name, std::move(out1)});
+  }
+  return true;
+}
+
 bool ModelAsset::load(const std::string& assetName, Renderer& R) {
   std::vector<uint8_t> data;
   if (!readAsset(assetName, data)) { std::fprintf(stderr, "DOW: missing asset %s\n", assetName.c_str()); return false; }

@@ -26,13 +26,26 @@ float Game::monsterChance(int i) const {
 void Game::setupParticipants() {
   parts.clear();
   Participant me; me.name = profile.name; me.local = true; me.fur = furColor(); parts.push_back(me);
+}
+
+// Admin tool: a bot that joins the room like a player. Survivor bots are prey; monster bots always hunt.
+void Game::addBotPlayer(bool monster) {
+  if ((int)parts.size() >= 1 + kBotPlayers + 4) { say("ROOM IS FULL"); return; }
   static const uint32_t furs[] = {0x6b4a2f, 0x4a4a52, 0x8a5a2a, 0x2f2f36, 0x7a3a22, 0x5a5a3a, 0x3a5a7a, 0x7a2a5a};
-  for (int i = 0; i < kBotPlayers; i++) {
-    for (int k = 0; k < kMaxBots; k++) if (!bots[k].active) {
-      Bot& b = bots[k]; b = Bot{}; b.active = true; b.kind = 2; b.part = (int)parts.size(); b.fur = rgb(furs[i % 8]);
-      Participant p; p.name = kBotNames[i]; p.bot = k; p.fur = b.fur; parts.push_back(p); break;
-    }
+  for (int k = 0; k < kMaxBots; k++) if (!bots[k].active) {
+    int n = (int)parts.size() - 1; Bot& b = bots[k]; b = Bot{}; b.active = true; b.kind = 2; b.part = (int)parts.size(); b.fur = rgb(furs[n % 8]);
+    nav.build(world, zone); b.p = nav.isFree(zone, loco.headW) ? Vec3{loco.headW.x + gR.range(-1.5f, 1.5f), 0, loco.headW.z + gR.range(-1.5f, 1.5f)} : nav.randomFree(zone, gR);
+    if (!nav.isFree(zone, b.p)) b.p = nav.randomFree(zone, gR);
+    Participant p; p.name = std::string(monster ? "BOT " : "") + kBotNames[n % 12]; p.bot = k; p.fur = b.fur; p.botMonster = monster; p.pity = 0;
+    b.role = monster && phase >= PH_STARTING && phase <= PH_HUNT ? PR_MONSTER : PR_SURVIVOR; p.role = b.role;
+    parts.push_back(p); say(monster ? "MONSTER BOT ADDED" : "SURVIVOR BOT ADDED"); return;
   }
+  say("BOT LIMIT");
+}
+
+void Game::clearBotPlayers() {
+  for (auto& p : parts) if (p.bot >= 0) bots[p.bot].active = false;
+  parts.resize(1);
 }
 
 // ------------------------------------------------------------------ lobby
@@ -49,7 +62,7 @@ void Game::goToLobby() {
     }
   }
   setForm(FORM_GORILLA); csaw = false; targetScale = 1;
-  loco.teleport(lobbySpawn(), lastHead); loco.yaw = lobbySpawnYaw();
+  loco.yaw = lobbySpawnYaw(); loco.teleport(lobbySpawn(), lastHead);
   gore.clear();
 }
 
@@ -82,10 +95,16 @@ void Game::computerKey(const std::string& k, int h) {
       if (k == "OPT1") { profile.mode = GM_BE_THE_MONSTER; msg("BE THE MONSTER"); }
       if (k == "OPT2") { profile.mode = GM_REGULAR; msg("REGULAR: COMING SOON"); }
       if (k == "OPT3") { profile.mode = GM_DONT_SPLASH; msg("DON'T SPLASH: COMING SOON"); }
-      if (k == "OPT4") { loco.teleport(kSpawn, lastHead); loco.yaw = 0; say("PRACTICE AREA  (TEST DUMMIES, FORMS)"); }
+      if (k == "OPT4") { loco.yaw = 0; loco.teleport(kSpawn, lastHead); say("PRACTICE AREA  (FORMS, CUBES)"); }
       saveProfile(); break;
     case CP_MONSTER:
       if (k.rfind("OPT", 0) == 0) { profile.monsterMode = k[3] - '1'; msg(std::string("NEXT ROUND: ") + kModeNames[profile.monsterMode]); saveProfile(); }
+      if (digit && k[0] >= '1' && k[0] <= '6') {
+        static const int pick[6] = {FORM_MONSTER, FORM_ROBOT, FORM_STALKER, FORM_WENDIGO, FORM_SMILER, FORM_CRAWLER};
+        int f = pick[k[0] - '1'];
+        if (f == FORM_STALKER && !unlocked && role < 1) msg("STALKER IS LOCKED: 5 KILLS");
+        else { profile.monsterForm = f; msg(std::string("YOUR MONSTER: ") + formName(f)); saveProfile(); }
+      }
       break;
     case CP_QUEUE:
       if (k == "OPT1" && phase == PH_LOBBY) { ready = true; phaseT = std::min(phaseT, 5.f); msg("READY! ROUND STARTS IN 5"); }
@@ -133,7 +152,8 @@ void Game::startRound() {
   roundMap = 1 + best; roundMode = profile.monsterMode;
   nav.build(world, roundMap);
   // monster pick: weighted by pity (0% right after you were the monster, rising every round you are not)
-  int nMon = roundMode == MM_TWO ? 2 : 1; std::vector<int> pool; for (int i = 0; i < (int)parts.size(); i++) pool.push_back(i);
+  int humans = 0; for (auto& p : parts) humans += p.bot < 0;
+  int nMon = std::min(roundMode == MM_TWO ? 2 : 1, humans); std::vector<int> pool; for (int i = 0; i < (int)parts.size(); i++) if (parts[i].bot < 0) pool.push_back(i);
   std::vector<int> mons;
   if (forceMeMonster) { mons.push_back(0); forceMeMonster = false; }
   while ((int)mons.size() < nMon) {
@@ -144,9 +164,11 @@ void Game::startRound() {
     mons.push_back(pick);
   }
   for (int i = 0; i < (int)parts.size(); i++) {
-    bool m = std::find(mons.begin(), mons.end(), i) != mons.end();
-    parts[i].role = m ? PR_MONSTER : PR_SURVIVOR; parts[i].pity = m ? 0 : parts[i].pity + 1; parts[i].shifted = false; parts[i].catches = 0;
+    bool m = std::find(mons.begin(), mons.end(), i) != mons.end() || parts[i].botMonster;
+    parts[i].role = m ? PR_MONSTER : PR_SURVIVOR; parts[i].shifted = false; parts[i].catches = 0;
+    if (parts[i].bot < 0) parts[i].pity = m ? 0 : parts[i].pity + 1;
   }
+  survivorsAtStart = 0; for (auto& p : parts) survivorsAtStart += p.role == PR_SURVIVOR;
   // spawns: survivors spread out, monsters as far from them as the map allows
   std::vector<Vec3> sp; for (Vec3 c : zoneSpawns(roundMap)) if (nav.isFree(roundMap, c)) sp.push_back(c);
   for (size_t i = sp.size(); i > 1; i--) std::swap(sp[i - 1], sp[gR.next() % i]);
@@ -161,7 +183,7 @@ void Game::startRound() {
     if (p.local) {
       loco.teleport(place[i], lastHead);
       bool shape = roundMode == MM_SHAPESHIFTER;
-      setForm(p.role == PR_MONSTER && !shape ? FORM_MONSTER : FORM_GORILLA);
+      setForm(p.role == PR_MONSTER && !shape ? myMonsterForm() : FORM_GORILLA);
     } else if (p.bot >= 0) {
       Bot& b = bots[p.bot]; b.p = place[i]; b.alive = true; b.limbs = 7; b.sliced = false; b.role = p.role; b.disguised = roundMode == MM_SHAPESHIFTER && p.role == PR_MONSTER;
       b.path = NavPath{}; b.think = 0; b.knock = {};
@@ -169,7 +191,7 @@ void Game::startRound() {
   }
   for (auto& b : bots) if (b.active && b.part < 0) b.active = false;   // practice dummies stay home
   phase = PH_STARTING; phaseT = 3;
-  char t[160]; std::snprintf(t, sizeof t, "%s  -  %s\n%s", zoneInfo(roundMap).name, kModeNames[roundMode], myRole() == PR_MONSTER ? "YOU ARE THE MONSTER" : "YOU ARE A SURVIVOR");
+  char t[160]; std::snprintf(t, sizeof t, "%s  -  %s\n%s%s", zoneInfo(roundMap).name, kModeNames[roundMode], myRole() == PR_MONSTER ? "YOU ARE THE MONSTER: " : "YOU ARE A SURVIVOR", myRole() == PR_MONSTER ? formName(myMonsterForm()) : "");
   banner = t; bannerT = 5; sfx(SFX_ROUND, loco.headW, 1, myRole() == PR_MONSTER ? 0.7f : 1.f);
 }
 
@@ -183,7 +205,7 @@ void Game::catchPart(int v, int by) {
   if (by >= 0) parts[by].catches++;
   if (roundMode == MM_INFECTION) {
     P.role = PR_MONSTER;
-    if (P.local) { setForm(FORM_MONSTER); banner = "YOU'VE BEEN INFECTED\nHUNT THEM DOWN"; bannerT = 4; jumpscare = 0.9f; sfx(SFX_SCREAM, loco.headW); }
+    if (P.local) { setForm(myMonsterForm()); banner = "YOU'VE BEEN INFECTED\nHUNT THEM DOWN"; bannerT = 4; jumpscare = 0.9f; sfx(SFX_SCREAM, loco.headW); }
     else { Bot& b = bots[P.bot]; b.role = PR_MONSTER; b.hitFlash = 0.5f; gore.punch(b.p + Vec3{0, 0.8f, 0}, {0, 1, 0}); sfx(SFX_SCREAM, b.p, 0.6f, 1.3f); }
   } else {
     P.role = PR_GHOST;
@@ -212,7 +234,7 @@ void Game::updateRound(const Input& in, float dt) {
     case PH_HIDE: phaseT -= dt; if (phaseT <= 0) { phase = PH_HUNT; phaseT = 150; banner = myRole() == PR_MONSTER ? "HUNT!" : "IT'S COMING"; bannerT = 2.5f; sfx(SFX_SCREAM, loco.headW, 0.5f, 0.7f); } break;
     case PH_HUNT: {
       phaseT -= dt; int alive = 0; for (auto& p : parts) alive += p.role == PR_SURVIVOR;
-      if (alive == 0) endRound(PR_MONSTER); else if (phaseT <= 0) endRound(PR_SURVIVOR);
+      if (alive == 0 && survivorsAtStart > 0) endRound(PR_MONSTER); else if (phaseT <= 0) endRound(survivorsAtStart > 0 ? PR_SURVIVOR : PR_MONSTER);
       break;
     }
     case PH_END: phaseT -= dt; if (phaseT <= 0) goToLobby(); break;
@@ -220,7 +242,7 @@ void Game::updateRound(const Input& in, float dt) {
   // you as the monster: tag survivors with your hands (shapeshifters must reveal first, B)
   Participant& me = parts[0];
   bool bNow = in.b; if (bNow && !bPrev && me.role == PR_MONSTER && roundMode == MM_SHAPESHIFTER && me.shiftCd <= 0) {
-    me.shifted = !me.shifted; me.shiftCd = 2; setForm(me.shifted ? FORM_MONSTER : FORM_GORILLA); sfx(SFX_SPORE, loco.headW, 0.8f, me.shifted ? 0.7f : 1.3f);
+    me.shifted = !me.shifted; me.shiftCd = 2; setForm(me.shifted ? myMonsterForm() : FORM_GORILLA); sfx(SFX_SPORE, loco.headW, 0.8f, me.shifted ? 0.7f : 1.3f);
   }
   bPrev = bNow; me.shiftCd -= dt;
   if (phase == PH_HUNT && me.role == PR_MONSTER && (roundMode != MM_SHAPESHIFTER || me.shifted)) {
@@ -323,11 +345,11 @@ void Game::staffAction(int a) {
     case 1: if (phase == PH_LOBBY) { ready = true; phaseT = 3; banner = "STAFF: ROUND STARTING"; bannerT = 2; } break;
     case 2: if (phase >= PH_STARTING && phase <= PH_HUNT) endRound(PR_SURVIVOR); break;
     case 3: if (phase == PH_HUNT) for (auto& p : parts) if (!p.local && p.role == PR_SURVIVOR) { p.role = PR_MONSTER; bots[p.bot].role = PR_MONSTER; bots[p.bot].disguised = false; banner = "STAFF: MONSTER RUSH"; bannerT = 3; break; } break;
-    case 4: for (int i = 0; i < 4; i++) spawnBot(1, loco.headW + Vec3{gR.range(-2, 2), -loco.headW.y, gR.range(-2, 2)}); banner = "STAFF: BOT PARTY"; bannerT = 2; break;
+    case 4: for (int i = 0; i < 4; i++) addBotPlayer(false); banner = "STAFF: 4 SURVIVOR BOTS JOINED"; bannerT = 2; break;
     case 5: if (role >= 2) { forceMeMonster = true; banner = "OWNER: YOU ARE THE MONSTER NEXT ROUND"; bannerT = 3; } break;
     case 6: if (role >= 2) { unlocked = true; save(); banner = "OWNER: STALKER UNLOCKED"; bannerT = 3; } break;
     case 7: gore.clear(); banner = "STAFF: GORE CLEARED"; bannerT = 2; break;
-    case 8: loco.teleport(kDenCenter + Vec3{0, 0, 1.5f}, lastHead); say("MOD DEN"); break;
+    case 8: loco.yaw = PI; loco.teleport(adminSpawn(), lastHead); say("ADMIN ROOM"); break;
     case 9: goToLobby(); break;
   }
   sfx(SFX_EVENT, loco.headW, 0.6f, 1.2f);
@@ -337,7 +359,7 @@ void Game::staffAction(int a) {
 void Game::saveProfile() const {
   if (savePath.empty()) return;
   if (FILE* f = std::fopen((savePath + ".profile").c_str(), "w")) {
-    std::fprintf(f, "%s\n%s\n%d %d %d %d %d %d\n", profile.name.c_str(), profile.room.c_str(), profile.r, profile.g, profile.b, profile.voice ? 1 : 0, profile.mode, profile.monsterMode);
+    std::fprintf(f, "%s\n%s\n%d %d %d %d %d %d %d\n", profile.name.c_str(), profile.room.c_str(), profile.r, profile.g, profile.b, profile.voice ? 1 : 0, profile.mode, profile.monsterMode, profile.monsterForm);
     std::fclose(f);
   }
 }
@@ -347,6 +369,7 @@ void Game::loadProfile() {
     char n[64] = {0}, r[64] = {0}; int a, b, c, v, m, mm;
     if (std::fscanf(f, "%63s %63s %d %d %d %d %d %d", n, r, &a, &b, &c, &v, &m, &mm) == 8) {
       profile.name = n; profile.room = r; profile.r = a % 10; profile.g = b % 10; profile.b = c % 10; profile.voice = v; profile.mode = m % 3; profile.monsterMode = mm % 4;
+      int mf = 0; if (std::fscanf(f, "%d", &mf) == 1 && mf > 0 && mf < FORM_COUNT) profile.monsterForm = mf;
     }
     std::fclose(f);
   }
