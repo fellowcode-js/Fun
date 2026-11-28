@@ -108,7 +108,7 @@ class Game {
   void save() const; void load();
 
  private:
-  bool gripPrev[2] = {false, false}, aPrev = false, bPrev = false, rxLatch = false;
+  bool gripPrev[2] = {false, false}, aPrev = false, rxLatch = false;
   float snapCd = 0;
   int lastBtn[2] = {-1, -1}, lastKey[2] = {-1, -1}, lastTile[2] = {-1, -1};
   void sfx(Sfx id, const Vec3& p, float vol = 1, float pitch = 1) { sounds.push_back({id, p, vol, pitch}); }
