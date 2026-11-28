@@ -3,6 +3,7 @@
 // left hand is a true mirror of the right one (the web build's flipped/inverted hands are gone).
 #include <android_native_app_glue.h>
 #include <android/log.h>
+#include <android/asset_manager.h>
 #include <jni.h>
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
@@ -18,6 +19,7 @@
 #include <vector>
 #include "../render/scene.h"
 #include "../audio/synth.h"
+#include "../core/assets.h"
 
 using namespace dow;
 
@@ -50,6 +52,13 @@ struct App {
   XrTime lastTime = 0;
 };
 static App A;
+
+// Game data (the original chainsaw hand model) ships inside the APK's assets/ folder.
+static bool apkAsset(const std::string& name, std::vector<uint8_t>& out) {
+  AAsset* a = AAssetManager_open(A.app->activity->assetManager, name.c_str(), AASSET_MODE_BUFFER);
+  if (!a) { LOGE("asset %s not found", name.c_str()); return false; }
+  size_t n = (size_t)AAsset_getLength(a); out.resize(n); bool ok = AAsset_read(a, out.data(), n) == (int)n; AAsset_close(a); return ok;
+}
 
 static XrPath path(const char* s) { XrPath p = XR_NULL_PATH; xrStringToPath(A.inst, s, &p); return p; }
 
@@ -302,6 +311,7 @@ static void frame() {
 void android_main(android_app* app) {
   JNIEnv* env = nullptr; app->activity->vm->AttachCurrentThread(&env, nullptr);
   A.app = app; app->userData = &A; app->onAppCmd = onCmd;
+  setAssetReader(apkAsset);
   bool ok = initInstance() && initEGL() && initSession();
   if (ok) {
     initActions();
