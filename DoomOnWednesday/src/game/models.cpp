@@ -78,14 +78,13 @@ static void gorillaTorso(Mesh& t, uint32_t belly) {
   t.ellipsoid({-0.14f, 0.17f, 0.015f}, {0.115f, 0.095f, 0.115f}, {}, 14, 8);             // shoulders / traps
   t.ellipsoid({0.14f, 0.17f, 0.015f}, {0.115f, 0.095f, 0.115f}, {}, 14, 8);
   t.ellipsoid({0, 0.23f, 0.05f}, {0.1f, 0.08f, 0.09f}, {}, 12, 8);                        // neck hump
-  t.ellipsoid({0, -0.14f, 0.02f}, {0.17f, 0.12f, 0.14f}, {}, 16, 9);                      // hips
-  t.capsule({-0.1f, -0.2f, 0.0f}, {-0.12f, -0.36f, -0.03f}, 0.075f, 0.065f, 12, 3);      // stubby legs
-  t.capsule({0.1f, -0.2f, 0.0f}, {0.12f, -0.36f, -0.03f}, 0.075f, 0.065f, 12, 3);
+  t.ellipsoid({0, -0.15f, 0.03f}, {0.185f, 0.15f, 0.155f}, {}, 18, 10);                     // rounded seat: no legs, you move with your arms
+  t.ellipsoid({0, -0.02f, 0.11f}, {0.17f, 0.2f, 0.07f}, {}, 14, 8);                       // broad back
+  for (int i = 0; i < 9; i++) { float a = -0.9f + i * 0.225f; t.cylinder({std::sin(a) * 0.16f, -0.25f, std::cos(a) * 0.12f + 0.03f}, {std::sin(a) * 0.19f, -0.31f, std::cos(a) * 0.15f + 0.03f}, 0.03f, 0.004f, 6, true); }  // shaggy fringe
   t.displace(s0, 0.008f, 14, 21); mottle(t, s0, 0.1f, 12, 7);
   size_t s1 = t.v.size();
   P(t, belly); t.ellipsoid({0, -0.02f, -0.125f}, {0.145f, 0.17f, 0.065f}, {}, 16, 10);   // bare chest / belly
   t.ellipsoid({-0.06f, 0.1f, -0.15f}, {0.07f, 0.045f, 0.03f}, {}, 10, 6); t.ellipsoid({0.06f, 0.1f, -0.15f}, {0.07f, 0.045f, 0.03f}, {}, 10, 6);  // pecs
-  P(t, 0x2a221f); t.ellipsoid({-0.125f, -0.405f, -0.06f}, {0.055f, 0.03f, 0.08f}, {}, 10, 6); t.ellipsoid({0.125f, -0.405f, -0.06f}, {0.055f, 0.03f, 0.08f}, {}, 10, 6);  // feet
   mottle(t, s1, 0.06f, 25, 13);
 }
 
@@ -115,6 +114,7 @@ static AvatarKit monster() {
     h.cylinder({x, -0.075f, -0.186f}, {x * 0.96f, -0.075f - l, -0.19f}, 0.008f, 0.0005f, 6, true);
     h.cylinder({x + 0.011f, -0.13f, -0.18f}, {x + 0.011f, -0.13f + l * 0.7f, -0.186f}, 0.007f, 0.0005f, 6, true);
   }
+  P(h, 0xe8dcc0); for (int s = -1; s <= 1; s += 2) h.cylinder({s * 0.055f, -0.13f, -0.17f}, {s * 0.075f, -0.04f, -0.21f}, 0.013f, 0.002f, 8, true);   // tusks
   P(h, 0xcfc1a0);
   for (int s = -1; s <= 1; s += 2) {                                                               // curled horns
     std::vector<Vec3> pts; std::vector<float> rr;
@@ -124,6 +124,9 @@ static AvatarKit monster() {
   Mesh& t = k.torso; gorillaTorso(t, 0x3a1c1a);
   P(t, 0x8a7a6a);
   for (int i = 0; i < 6; i++) { float y = 0.24f - i * 0.075f; t.cylinder({0, y, 0.14f}, {0, y + 0.03f, 0.25f - i * 0.01f}, 0.03f, 0.001f, 8, true); }  // back spikes
+  FUR(t, 0.46f); t.ellipsoid({-0.17f, 0.22f, 0.03f}, {0.13f, 0.11f, 0.13f}, {}, 14, 8); t.ellipsoid({0.17f, 0.22f, 0.03f}, {0.13f, 0.11f, 0.13f}, {}, 14, 8);   // hulking shoulders
+  P(t, 0xff3010, 0.9f);
+  for (int s2 = -1; s2 <= 1; s2 += 2) { std::vector<Vec3> v; std::vector<float> r; for (int i = 0; i <= 6; i++) { float k = i / 6.f; v.push_back({s2 * (0.05f + 0.08f * k), 0.18f - 0.3f * k, 0.165f - 0.02f * k}); r.push_back(0.007f); } t.tube(v, r, 5, true); }   // glowing veins
   furArm(k.upperArm, k.upperLen, 0.085f, 0.07f, 41); furArm(k.foreArm, k.foreLen, 0.08f, 0.06f, 43);
   buildHand(k, 0x241414, 0x241414, true, 0.066f, 0.0155f, true, 0xd9cfb8);
   return k;
@@ -145,8 +148,8 @@ static AvatarKit robot() {
   P(t, 0x2a2e34); t.roundBox({0, 0.04f, -0.155f}, {0.12f, 0.12f, 0.012f}, 0.2f, {}, 6);
   P(t, 0x22ffee, 0.9f); for (int i = 0; i < 3; i++) t.box({0, 0.1f - i * 0.05f, -0.168f}, {0.09f - i * 0.015f, 0.008f, 0.003f});
   P(t, 0x5a6068); t.cylinder({0, -0.18f, 0}, {0, -0.1f, 0}, 0.12f, 0.15f, 16, true);
-  P(t, 0x7a8088); t.capsule({-0.1f, -0.2f, 0}, {-0.11f, -0.36f, -0.02f}, 0.06f, 0.055f, 10, 3); t.capsule({0.1f, -0.2f, 0}, {0.11f, -0.36f, -0.02f}, 0.06f, 0.055f, 10, 3);
-  P(t, 0x3a3e44); t.roundBox({-0.115f, -0.405f, -0.05f}, {0.05f, 0.025f, 0.08f}, 0.3f, {}, 6); t.roundBox({0.115f, -0.405f, -0.05f}, {0.05f, 0.025f, 0.08f}, 0.3f, {}, 6);
+  P(t, 0x4a5058); t.sphere({0, -0.22f, 0}, 0.1f, 14, 8);                                   // hover core instead of legs
+  P(t, 0x22ffee, 1.0f); t.torus({0, -0.24f, 0}, 0.1f, 0.012f, {}, 20, 6);
   P(k.upperArm, 0x8e949c); k.upperArm.cylinder({0, 0.02f, 0}, {0, k.upperLen, 0}, 0.05f, 0.045f, 12, true); P(k.upperArm, 0x4a5058); k.upperArm.sphere({0, 0, 0}, 0.065f, 12, 8);
   P(k.foreArm, 0x9aa0a8); k.foreArm.cylinder({0, 0.02f, 0}, {0, k.foreLen, 0}, 0.045f, 0.04f, 12, true); P(k.foreArm, 0x4a5058); k.foreArm.sphere({0, 0, 0}, 0.055f, 12, 8);
   P(k.foreArm, 0xffaa22, 0.6f); k.foreArm.torus({0, k.foreLen * 0.6f, 0}, 0.046f, 0.006f, {}, 16, 6);
@@ -172,7 +175,7 @@ static AvatarKit stalker() {
   P(t, 0x8c968c); t.ellipsoid({0, 0.06f, 0}, {0.15f, 0.22f, 0.1f}, {}, 18, 12);
   P(t, 0x7a837a); for (int i = 0; i < 5; i++) t.torus({0, 0.14f - i * 0.05f, -0.01f}, 0.135f - i * 0.006f, 0.008f, {}, 18, 5);  // ribs
   P(t, 0x8c968c); t.ellipsoid({0, -0.14f, 0}, {0.1f, 0.09f, 0.08f}, {}, 12, 8);
-  t.capsule({-0.06f, -0.2f, 0}, {-0.07f, -0.4f, -0.02f}, 0.04f, 0.035f, 10, 3); t.capsule({0.06f, -0.2f, 0}, {0.07f, -0.4f, -0.02f}, 0.04f, 0.035f, 10, 3);
+  for (int i = 0; i < 4; i++) t.cylinder({(i - 1.5f) * 0.035f, -0.2f, 0}, {(i - 1.5f) * 0.05f, -0.42f + 0.03f * (i % 2), 0.02f}, 0.018f, 0.002f, 6, true);   // trailing tendrils
   P(t, 0x44ff66, 0.9f); for (int i = 0; i < 6; i++) t.sphere({(i % 2 ? 0.05f : -0.05f), 0.2f - i * 0.06f, 0.095f}, 0.022f, 8, 5);   // spore sacs on the back
   P(k.upperArm, 0x8c968c); k.upperArm.capsule({0, 0, 0}, {0, k.upperLen, 0}, 0.04f, 0.032f, 10, 3);
   P(k.foreArm, 0x8c968c); k.foreArm.capsule({0, 0, 0}, {0, k.foreLen, 0}, 0.034f, 0.026f, 10, 3);

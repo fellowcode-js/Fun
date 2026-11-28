@@ -32,12 +32,28 @@ EGL_PLATFORM=surfaceless ./build/dow_desktop shots shots   # renders 8 screensho
 - Poke buttons with your index finger.
 
 ## What's in the game
-- Lobby (Level 0, The Backrooms) carried over from your original map, plus the maze around it.
-- Forms: Gorilla, Monster, Robot (chainsaw), Stalker (locked until 5 kills; saved between sessions).
-- Test spots: a standing dummy and a running bot. Chainsaw slices bots in half (real clip-plane cut); monsters rip heads and arms off; punches knock bots back.
-- Gore: blood droplets with arcs, splats where they land, bouncing gibs. Gore level off / on / extreme.
-- Staff keypad (lobby west wall) unlocks the mod den behind the vent and **Mushroom OS**: platforms, speed, gore level, lights, forms, chainsaw hand, bot spawns, teleport, owner tools.
-  Default codes: owner `246810`, mod `135790`. **Change them** in `src/game/staff_codes.h`.
+**Main lobby** (its own place, not a map). You spawn on the stool at the computer:
+- **UP/DOWN** pick a page, letters/digits type, **OPT1-4** choose, **ENTER** confirms.
+- Pages: ROOM (code), NAME, COLOR (R/G/B 0-9), VOICE, GAME MODE, MONSTER MODE, QUEUE (your monster chance, READY), STAFF.
+- Turn left: the door leads to the **map vote room**. Poke a pad to vote. The READY pillar starts the round early.
+
+**Game modes**: Be the Monster (live). Regular and Don't Splash are listed as coming soon.
+OPT4 on the GAME MODE page takes you to the practice area (forms, test dummies, Mushroom OS, mod den).
+
+**Be the Monster**
+- Sub-modes: One Monster, Two Monsters, Infection (caught players turn), Shapeshifter (look like a gorilla, **B** to shift).
+- Monster RNG: right after you were the monster your chance is 0%. It rises every round you aren't, so nobody is stuck as monster or never gets a turn.
+- Each round: get ready, then hide (monsters are blind), then hunt for 2:30. Catch by touching; climbing out of reach saves you.
+  Caught players become ghosts (or monsters in Infection). Then everyone goes back to the lobby.
+- **Maps**: The Backrooms, The Poolrooms, Parking Garage, Lights Out (generated maze, head-lamp only).
+- Bots fill the room until online play exists. They path through the maps; monsters hunt and survivors flee.
+
+**Staff** (code on the STAFF page, or the keypad in the practice area): blackout, low gravity, blood moon, giant mode,
+start/end round, monster rush, bot party, monster next round (owner), unlock stalker (owner), clear gore, mod den.
+Default codes: owner `246810`, mod `135790`. **Change them** in `src/game/staff_codes.h`.
+
+**The chainsaw hand** is your original `robot_arm_right.glb` with its own animations.
+`tools/glb_to_dowm.py` converts it into the runtime format in `android/app/src/main/assets/`.
 
 ## Layout
 ```

@@ -138,6 +138,9 @@ static int shots(const std::string& out) {
   for (int i = 0; i < 26; i++) { float t = i / 25.f; s.in.hand[1].p = Vec3{0.55f - 0.9f * t, 1.15f, -0.55f}; s.in.hand[1].q = Quat::axisAngle({0, 0, 1}, -0.2f); s.steps(1); }
   s.steps(14);
   { Vec3 h = g.loco.headW; s.shot(out + "/08_original_chainsaw.png", h + Vec3{-1.7f, 0.5f, -1.5f}, h + Vec3{0.1f, -0.55f, -0.55f}, 70); }
+  // 9. the four forms (practice area statues)
+  g.setForm(FORM_GORILLA); g.loco.teleport({3.0f, 0, -1.2f}, s.in.head); s.baseInput(); s.steps(30);
+  s.shot(out + "/09_forms.png", {3.6f, 1.45f, -1.25f}, {6.55f, 0.95f, -1.25f}, 78);
   return 0;
 }
 
