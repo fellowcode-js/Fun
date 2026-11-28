@@ -18,7 +18,7 @@ jobs:
       - name: Physics + game rule tests
         run: ./build/dow_tests
       - name: Screenshots
-        run: mkdir -p shots && EGL_PLATFORM=surfaceless ./build/dow_desktop shots shots
+        run: mkdir -p shots && DOW_ASSETS=DoomOnWednesday/android/app/src/main/assets EGL_PLATFORM=surfaceless ./build/dow_desktop shots shots
       - uses: actions/upload-artifact@v4
         with: { name: dow-screenshots, path: shots/*.png }
 
