@@ -91,54 +91,53 @@ static int shots(const std::string& out) {
   Sim s; if (!s.sc.init()) return 1; s.tgt = makeTarget(1280, 720);
   s.g.init(); s.baseInput(); s.steps(120);
   Game& g = s.g; s.sc.showLocalBody = true; s.sc.showLocalHead = true;
+  g.role = 2; g.profile.name = "KONG"; g.parts[0].name = "KONG";
+  const Vec3 LO = zoneInfo(ZONE_LOBBY).origin;
 
-  // 1. lobby overview
-  s.shot(out + "/01_lobby.png", {-5.8f, 2.25f, -5.9f}, {2.5f, 0.7f, 3.0f}, 80);
-
-  // 2. first-person: both hands raised in front, palms facing each other, then a curled grip on the right
+  // 1. main lobby: you on the stool at the computer
+  g.page = CP_QUEUE; s.steps(4);
+  s.shot(out + "/01_main_lobby.png", LO + Vec3{2.6f, 2.0f, 0.6f}, LO + Vec3{-0.3f, 0.9f, -3.0f}, 80);
+  // 2. the computer up close (first person, hands at the keyboard)
   s.sc.showLocalBody = false; s.sc.showLocalHead = false;
-  s.baseInput(PI); s.in.hand[0].p = {0.2f, 1.35f, 0.42f}; s.in.hand[1].p = {-0.2f, 1.35f, 0.42f};
-  s.in.hand[0].q = s.in.hand[1].q = Quat::yaw(PI) * Quat::axisAngle({1, 0, 0}, 0.2f); s.in.grip[1] = 0.9f;
-  s.g.loco.teleport({0, 0, -1.0f}, s.in.head); s.steps(40);
-  { Vec3 e = g.loco.headW; s.shot(out + "/02_first_person_hands.png", e, e + Quat::yaw(PI).rotate(Vec3{0, -0.28f, -1}), 90); }
+  s.baseInput(); s.in.hand[0].p = {-0.18f, 1.05f, -0.55f}; s.in.hand[1].p = {0.18f, 1.05f, -0.55f};
+  s.in.hand[0].q = s.in.hand[1].q = Quat::axisAngle({1, 0, 0}, -0.9f); g.page = CP_MONSTER; s.steps(20);
+  { Vec3 e = g.loco.headW; s.shot(out + "/02_computer.png", e, e + Vec3{0, -0.35f, -1}, 85); }
+  // 3. map vote room through the door on your left
+  s.sc.showLocalBody = true; s.sc.showLocalHead = true; s.baseInput();
+  g.votes[0] += 2; g.myVote = 2; g.votes[2]++; s.steps(30);
+  s.shot(out + "/03_map_vote.png", LO + Vec3{-6.2f, 1.7f, 2.6f}, LO + Vec3{-12.4f, 1.1f, -0.6f}, 80);
 
-  s.sc.showLocalBody = true; s.sc.showLocalHead = true;
-  // 3. form statues
-  s.g.loco.teleport({3.4f, 0, -1.2f}, s.in.head); s.baseInput(); s.steps(30);
-  s.shot(out + "/03_forms.png", {3.0f, 1.55f, -1.25f}, {6.55f, 1.05f, -1.25f}, 85);
+  // rounds: survivor on each map, bots playing
+  struct Cap { int map; int mode; const char* file; Vec3 eyeOff, lookOff; float secs; };
+  Cap caps[] = {{ZONE_POOLROOMS, MM_TWO, "/04_poolrooms_round.png", {-2.5f, 1.2f, 2.5f}, {1.0f, -0.3f, -1.5f}, 22},
+                {ZONE_GARAGE, MM_INFECTION, "/05_garage_infection.png", {-2.5f, 0.8f, 2.0f}, {1.0f, -0.4f, -1.5f}, 25},
+                {ZONE_LIGHTSOUT, MM_SHAPESHIFTER, "/06_lights_out.png", {0.0f, 0.2f, 0.0f}, {0.0f, -0.2f, -3.0f}, 21}};
+  for (const Cap& c : caps) {
+    g.goToLobby(); s.steps(5);
+    for (int& v : g.votes) v = 0; g.votes[c.map - 1] = 9; g.profile.monsterMode = c.mode; g.parts[0].pity = 0;
+    g.ready = true; g.phaseT = 0.05f; s.steps(5);
+    s.steps((int)(72 * c.secs));
+    // look toward the nearest bot
+    Vec3 e = g.loco.headW, tgt = e + Vec3{0, 0, -2}; float bd = 1e9f;
+    for (auto& b : g.bots) if (b.active && b.part >= 0 && zoneAt(b.p) == g.zone) { float d = length2(b.p - e); if (d < bd) { bd = d; tgt = b.p + Vec3{0, 0.6f, 0}; } }
+    Vec3 eye = e + Vec3{0, 0.5f, 0} + normalize(e - tgt) * 2.2f; if (c.map == ZONE_LIGHTSOUT) eye = e + Vec3{0, 0.9f, 0} + normalize(e - tgt) * 1.2f;
+    s.shot(out + c.file, eye, tgt, 80);
+  }
+  // 7. backrooms round, you are the monster, jumpscare-free view of the hunt
+  g.goToLobby(); s.steps(5); for (int& v : g.votes) v = 0; g.votes[0] = 9; g.profile.monsterMode = MM_ONE; g.forceMeMonster = true;
+  g.ready = true; g.phaseT = 0.05f; s.steps(5); s.steps(72 * 17);
+  { Vec3 e = g.loco.headW, tgt = e + Vec3{0, 0, -2}; float bd = 1e9f;
+    for (auto& b : g.bots) if (b.active && b.part >= 0 && b.alive) { float d = length2(b.p - e); if (d < bd) { bd = d; tgt = b.p + Vec3{0, 0.5f, 0}; } }
+    s.shot(out + "/07_backrooms_you_are_monster.png", e + normalize(e - tgt) * 1.6f + Vec3{0.6f, 0.7f, 0}, tgt, 80); }
 
-  // 4. robot chainsaw slicing a dummy (third person)
-  s.g.setForm(FORM_ROBOT); s.g.role = 2;
-  s.g.loco.teleport({-4.2f, 0, 1.6f}, s.in.head); s.baseInput(); s.steps(200);
-  s.g.spawnBot(0, {-4.2f, 0, 0.75f});
-  s.in.a = true; s.steps(2); s.in.a = false; s.steps(100);  // transform to saw (1.2 s)
+  // 8. the original chainsaw hand, slicing in the practice area
+  g.goToLobby(); s.steps(3); g.profile.mode = GM_REGULAR;   // stop the lobby timer
+  g.setForm(FORM_ROBOT); g.loco.teleport({-4.2f, 0, 1.6f}, s.in.head); s.baseInput(); s.steps(200);
+  g.spawnBot(0, {-4.2f, 0, 0.75f});
+  s.in.a = true; s.steps(2); s.in.a = false; s.steps(100);
   for (int i = 0; i < 26; i++) { float t = i / 25.f; s.in.hand[1].p = Vec3{0.55f - 0.9f * t, 1.15f, -0.55f}; s.in.hand[1].q = Quat::axisAngle({0, 0, 1}, -0.2f); s.steps(1); }
   s.steps(14);
-  { Vec3 h = g.loco.headW; s.shot(out + "/04_chainsaw.png", h + Vec3{-1.7f, 0.5f, -1.5f}, h + Vec3{0.1f, -0.55f, -0.55f}, 70); }
-
-  // 5. monster rips a runner apart, blood on the carpet
-  s.g.clearBots(); s.g.setForm(FORM_MONSTER); s.steps(120);
-  s.g.loco.teleport({4.2f, 0, 2.2f}, s.in.head); s.baseInput(); s.steps(30);
-  s.g.spawnBot(0, {4.2f, 0, 2.95f}); s.steps(4);
-  { Bot& b = s.g.bots[0]; Vec3 head = b.p + Vec3{0, 0.8f, 0}; Vec3 off = head - g.loco.rig; off = Quat::yaw(-g.loco.yaw).rotate(off) / g.loco.scale;
-    s.in.hand[1].p = off; s.steps(30); s.in.grip[1] = 1; s.steps(3); s.in.grip[1] = 0; s.in.hand[1].p = {0.3f, 1.3f, 0.2f}; s.steps(50); }
-  { Vec3 h = g.loco.headW; s.shot(out + "/05_monster_rip.png", h + Vec3{1.3f, 0.3f, -0.6f}, h + Vec3{-0.2f, -0.6f, 1.0f}, 75); }
-
-  // 6. mod den: Mushroom OS (owner) + keypad
-  s.g.clearBots(); s.g.setForm(FORM_GORILLA); s.g.role = 2; s.g.osPage = 1; s.g.platformsOn = true; s.g.lightsDim = false; s.steps(150);
-  s.g.loco.teleport({-11.5f, 0, 0.6f}, s.in.head); s.baseInput(PI / 2); s.steps(30);
-  s.shot(out + "/06_mod_den.png", {-10.4f, 1.6f, 1.4f}, {-13.1f, 1.25f, -0.2f}, 80);
-  s.g.osPage = 0;
-
-  // 7. the backrooms maze
-  s.g.loco.teleport({-15.f, 0, -9.f}, s.in.head); s.baseInput(); s.steps(30);
-  s.shot(out + "/07_backrooms.png", {-21.0f, 1.5f, -9.0f}, {-14.0f, 1.2f, -9.6f}, 80);
-
-  s.sc.showLocalBody = false; s.sc.showLocalHead = false;
-  // 8. hands close-up from the side (orientation check): left + right, palms in, thumbs up
-  s.g.loco.teleport({0, 0, -1.0f}, s.in.head); s.baseInput(PI); s.in.hand[0].p = {0.17f, 1.3f, 0.45f}; s.in.hand[1].p = {-0.17f, 1.3f, 0.45f};
-  s.in.hand[0].q = s.in.hand[1].q = Quat::yaw(PI); s.in.grip[0] = 0; s.in.grip[1] = 0.6f; s.steps(30);
-  { Vec3 c = (g.loco.hand[0].phys + g.loco.hand[1].phys) * 0.5f; s.shot(out + "/08_hands_closeup.png", c + Vec3{0.0f, 0.12f, 0.55f}, c, 60); }
+  { Vec3 h = g.loco.headW; s.shot(out + "/08_original_chainsaw.png", h + Vec3{-1.7f, 0.5f, -1.5f}, h + Vec3{0.1f, -0.55f, -0.55f}, 70); }
   return 0;
 }
 

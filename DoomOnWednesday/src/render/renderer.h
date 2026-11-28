@@ -32,6 +32,7 @@ struct LightSet { Vec4 pos[8]; Vec4 col[8]; int n = 0; };
 class Renderer {
  public:
   GLuint texWall = 0, texCarpet = 0, texCeil = 0, texFont = 0, texWhite = 0;
+  GLuint tex[8] = {0};   // indexed by TexId (maps.h)
   Vec3 fogColor{0.09f, 0.075f, 0.03f}; float fogNear = 4, fogFar = 28;
   Vec3 ambient{0.10f, 0.09f, 0.05f}, sky{0.30f, 0.27f, 0.16f}, ground{0.10f, 0.08f, 0.03f};
   LightSet lights;

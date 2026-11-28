@@ -35,7 +35,10 @@ class Scene {
   AvatarGpu kits[KIT_COUNT];
   ModelAsset robotArm;   // the original chainsaw hand (assets/robot_arm_right.dowm)
   PropKit props; GpuMesh mLightPanel, mLightDiff, mPedRing, mButtonCap, mCube, mDrop, mDecal, mGibChunk, mGibBone, mKeyCap;
-  GpuMesh mWalls, mFloor, mCeil, mTrim, mStatic, mStaticText;
+  struct ZoneGpu { GpuMesh walls, floor, ceiling, trim, props, water; std::vector<Vec3> lights; std::vector<float> flicker; };
+  ZoneGpu zones[ZONE_COUNT];
+  GpuMesh mLobbyKeyCap, mLobbyScreen;
+  GpuMesh mStatic, mStaticText, mLobbyText, mLobbyDyn, mHud, mTags, mBanner; std::string lobbyCache, bannerKey, hudKey;
   GpuMesh mOSBg, mOSText, mDyn, mToast; std::string osKey, dynKey, toastKey;
   std::vector<Vec3> lightPos; std::vector<float> lightFlicker;
   float bodyYaw = 0; bool bodyYawInit = false;
@@ -44,6 +47,10 @@ class Scene {
   void drawRobotHand(const Vec3& pos, const Quat& q, float s, const Game& g);
   void buildStatic();
   void pickLights(const Game& g, const Vec3& head);
+  void buildLobbyStatic();
+  void drawLobby(const Game& g);
+  void drawOverlays(const Game& g);
+  void drawBots(const Game& g);
 };
 
 }  // namespace dow

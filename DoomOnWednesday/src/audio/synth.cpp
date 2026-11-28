@@ -14,7 +14,7 @@ static float durOf(int id) {
   switch (id) {
     case SFX_TAP: return 0.07f; case SFX_THUD: return 0.18f; case SFX_GORE: case SFX_RIP: return 0.5f; case SFX_SLICE: return 0.45f;
     case SFX_BEEP: return 0.09f; case SFX_DENY: return 0.28f; case SFX_SPORE: return 0.7f; case SFX_SAW_ON: return 0.45f; case SFX_SAW_OFF: return 0.4f;
-    case SFX_UNLOCK: return 0.5f; case SFX_PUNCH: return 0.14f; case SFX_KEY: return 0.035f; default: return 0.1f;
+    case SFX_UNLOCK: return 0.5f; case SFX_PUNCH: return 0.14f; case SFX_KEY: return 0.035f; case SFX_SCREAM: return 1.1f; case SFX_ROUND: return 1.4f; case SFX_EVENT: return 0.9f; default: return 0.1f;
   }
 }
 
@@ -49,6 +49,13 @@ void Synth::render(float* out, int frames, int rate) {
         case SFX_DENY: { vo.ph += 180 * dt; vo.ph -= std::floor(vo.ph); float gate = (k < 0.4f || (k > 0.55f && k < 0.95f)) ? 1.f : 0.f; s = (vo.ph < 0.5f ? 0.3f : -0.3f) * gate; break; }
         case SFX_SPORE: { vo.lp += (nz() - vo.lp) * (0.02f + 0.2f * k); vo.lp2 += (vo.lp - vo.lp2) * 0.3f; s = (vo.lp - vo.lp2) * 3.f * std::sin(k * 3.14159f); break; }
         case SFX_SAW_ON: case SFX_SAW_OFF: { float up = vo.id == SFX_SAW_ON ? k : 1 - k; vo.ph += (40 + 70 * up) * dt; vo.ph -= std::floor(vo.ph); s = ((vo.ph * 2 - 1) * 0.5f + nz() * 0.2f) * (0.3f + 0.7f * std::sin(k * 3.14159f)) * 0.6f; break; }
+        case SFX_SCREAM: {   // jumpscare: detuned saw cluster screeching upward + noise
+          float f = (300 + 900 * k) * vo.pitch; vo.ph += f * dt; vo.ph2 += f * 1.41f * dt; vo.ph -= std::floor(vo.ph); vo.ph2 -= std::floor(vo.ph2);
+          s = ((vo.ph * 2 - 1) + (vo.ph2 * 2 - 1) * 0.7f + nz() * 0.8f) * 0.35f * (k < 0.1f ? k * 10 : env); break; }
+        case SFX_ROUND: {    // low bell toll
+          vo.ph += 98 * vo.pitch * dt; vo.ph2 += 247 * vo.pitch * dt; s = (std::sin(vo.ph * TAU) * 0.6f + std::sin(vo.ph2 * TAU) * 0.25f) * env * env * 0.7f; break; }
+        case SFX_EVENT: {    // alarm sweep
+          vo.ph += (500 + 400 * std::sin(t * 18)) * dt; s = std::sin(vo.ph * TAU) * 0.25f * env; break; }
         case SFX_UNLOCK: { float note = k < 0.33f ? 1.f : k < 0.66f ? 1.26f : 1.5f; vo.ph += 523 * note * vo.pitch * dt; s = std::sin(vo.ph * TAU) * 0.3f * (1 - std::fmod(k * 3, 1.f) * 0.6f); break; }
       }
       s *= vo.vol; float pl = std::sqrt(0.5f * (1 - vo.pan)), pr = std::sqrt(0.5f * (1 + vo.pan));

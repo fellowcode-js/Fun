@@ -12,6 +12,10 @@ struct Image { int w = 0, h = 0; std::vector<uint8_t> px; };
 Image makeWallpaper(int size = 512);
 Image makeCarpet(int size = 512);
 Image makeCeiling(int size = 256);
+Image makeTiles(int size = 512);      // poolrooms: white glazed tile, grout
+Image makeConcrete(int size = 512);   // parking garage
+Image makeWood(int size = 512);       // lobby wall boards
+Image makePlanks(int size = 512);     // lobby floor
 Image makeFontAtlas();   // 16 x 6 cells, ASCII 32..127
 
 // Append text quads. origin = centre of the text block; right/up span one character cell each.

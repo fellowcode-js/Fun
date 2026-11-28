@@ -72,6 +72,55 @@ Image makeCeiling(int N) {
   return im;
 }
 
+
+Image makeTiles(int N) {
+  // 8 x 8 tiles per repeat (one repeat = 1.6 m): glossy off-white with blue-grey grout and the odd stained tile
+  Image im = blank(N, N); Color tile = rgb(0xe8eef0), grout = rgb(0x9aa8ae), stain = rgb(0xc8d4c4);
+  int T = N / 8;
+  for (int y = 0; y < N; y++) for (int x = 0; x < N; x++) {
+    int tx = x / T, ty = y / T, lx = x % T, ly = y % T; float u = (float)x / N, v = (float)y / N;
+    Color c = scaleC(tile, 0.94f + 0.08f * hash2(tx, ty, 3));
+    if (hash2(tx, ty, 9) > 0.9f) c = mixC(c, stain, 0.5f);
+    float edge = std::min(std::min(lx, T - 1 - lx), std::min(ly, T - 1 - ly)) / (float)T;
+    c = scaleC(c, 0.9f + 0.1f * smooth01(edge * 8));                       // bevel
+    if (lx < 2 || ly < 2) c = grout;
+    c = scaleC(c, 0.96f + 0.06f * tnoise(u, v, 16, 2, 5));
+    put(im, x, y, c);
+  }
+  return im;
+}
+
+Image makeConcrete(int N) {
+  Image im = blank(N, N); Color base = rgb(0x8a8680), dark = rgb(0x5a5752), oil = rgb(0x3a3834);
+  for (int y = 0; y < N; y++) for (int x = 0; x < N; x++) {
+    float u = (float)x / N, v = (float)y / N;
+    float n = tnoise(u, v, 8, 4, 31), grain = hash2(x, y, 33), blot = tnoise(u, v, 3, 3, 37);
+    Color c = mixC(base, dark, 0.6f * n + 0.15f * grain);
+    c = mixC(c, oil, 0.6f * smooth01((blot - 0.68f) * 6));
+    if (hash2(x / 3, y / 3, 41) > 0.985f) c = scaleC(c, 0.7f);                 // pits
+    if ((y % (N / 2)) < 2) c = scaleC(c, 0.75f);                                // slab joints
+    put(im, x, y, c);
+  }
+  return im;
+}
+
+static Image woodGen(int N, int boards, Color a, Color b, uint32_t seed) {
+  Image im = blank(N, N); int B = N / boards;
+  for (int y = 0; y < N; y++) for (int x = 0; x < N; x++) {
+    int bi = x / B; float u = (float)x / N, v = (float)y / N; float off = hash2(bi, 0, seed) * 7;
+    float ring = std::sin((v * 6 + off) * 6.2831f + tnoise(u, v, 4, 3, seed + bi) * 8) * 0.5f + 0.5f;
+    Color c = mixC(a, b, 0.35f * ring + 0.35f * tnoise(u * 0.5f, v * 4, 8, 3, seed));
+    c = scaleC(c, 0.85f + 0.25f * hash2(bi, 7, seed));
+    if (x % B < 2) c = scaleC(c, 0.45f);                                        // gaps between boards
+    if (hash2(bi, (int)(v * 3), seed + 5) > 0.8f && std::fabs(std::fmod(v * 3, 1.f) - 0.5f) < 0.004f) c = scaleC(c, 0.5f);  // butt joints
+    if (hash2(x / 4, y / 4, seed + 9) > 0.995f) c = scaleC(c, 0.4f);           // nail holes / knots
+    put(im, x, y, c);
+  }
+  return im;
+}
+Image makeWood(int N) { return woodGen(N, 6, rgb(0x5a3a22), rgb(0x3a2414), 61); }
+Image makePlanks(int N) { return woodGen(N, 5, rgb(0x6a4a2c), rgb(0x40281a), 71); }
+
 // ---------------------------------------------------------------------------- font (5x7, drawn by hand)
 static const uint8_t* glyph(char ch) {
   static const uint8_t blankG[7] = {0};

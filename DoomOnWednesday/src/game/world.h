@@ -14,6 +14,7 @@ struct Collider {
   uint8_t surface = SURF_WALL;
   bool enabled = true;
   float friction = 1.0f;  // 1 = sticky (gorilla grip), 0 = ice (hands slide)
+  int8_t zone = -1;       // -1 = everywhere, else the zone (lobby / map) it belongs to
 };
 
 struct Contact {
@@ -35,9 +36,10 @@ class World {
  public:
   std::vector<Collider> cols;
   int floorIdx = -1, ceilIdx = -1;
+  int activeZone = -1;                       // only this zone's colliders (and global ones) are solid
 
   int add(const Vec3& mn, const Vec3& mx, uint8_t surface, uint8_t flag = COL_SOLID, float friction = 1.f);
-  void buildLevel();                         // Backrooms walls + floor + ceiling + furniture
+  void buildLevel();                         // every zone: main lobby + the four maps
   bool solidFor(int i, int role) const;
   // Deepest contact of a sphere against everything solid for `role`.
   Contact sphereContact(const Vec3& p, float r, int role, float skin = 0.f) const;

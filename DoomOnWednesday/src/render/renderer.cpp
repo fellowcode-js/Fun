@@ -128,6 +128,9 @@ bool Renderer::init() {
   texCarpet = makeTexture(makeCarpet(), true, false);
   texCeil = makeTexture(makeCeiling(), true, false);
   texFont = makeTexture(makeFontAtlas(), true, true);
+  tex[0] = texWall; tex[1] = texCarpet; tex[2] = texCeil;
+  tex[3] = makeTexture(makeTiles(), true, false); tex[4] = makeTexture(makeConcrete(), true, false);
+  tex[5] = makeTexture(makeWood(), true, false); tex[6] = makeTexture(makePlanks(), true, false);
   Image w; w.w = w.h = 2; w.px.assign(16, 255); texWhite = makeTexture(w, false, false);
   return true;
 }

@@ -29,6 +29,7 @@ static const PropBox kPropBoxes[] = {
     {{6.55f, 0.08f, 0.0f}, {0.28f, 0.08f, 0.4f}, 2},
     {{6.55f, 0.08f, 2.5f}, {0.28f, 0.08f, 0.4f}, 2},
     {{0, 0.23f, -2.4f}, {0.2f, 0.23f, 0.2f}, 2},             // stool
+    {{-1.2f, 0.455f, -5.2f}, {0.16f, 0.455f, 0.16f}, 3},     // back-to-lobby podium
     {{-10.0f, 0.9f, -3.5f}, {0.7f, 0.9f, 0.06f}, 3},         // chainsaw rack board
     {{-13.35f, 0.275f, 0}, {0.45f, 0.275f, 0.8f}, 3},        // Mushroom OS desk (low: gorillas are short)
 };

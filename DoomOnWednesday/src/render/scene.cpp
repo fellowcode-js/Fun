@@ -3,6 +3,8 @@
 #include "../game/map_data.h"
 #include <cmath>
 #include <cstdio>
+#include <algorithm>
+#include "../game/maps.h"
 
 namespace dow {
 
@@ -43,11 +45,12 @@ bool Scene::init() {
   props = buildProps();
   mLightPanel.upload(props.lightPanel); mLightDiff.upload(props.lightDiffuser); mPedRing.upload(props.pedestalRing); mButtonCap.upload(props.buttonCap);
   mCube.upload(props.cube); mDrop.upload(props.dropGeo); mDecal.upload(props.decalQuad); mGibChunk.upload(props.gibChunk); mGibBone.upload(props.gibBone); mKeyCap.upload(props.keyCap);
-  LevelMeshes L = buildLevelMeshes(); mWalls.upload(L.walls); mFloor.upload(L.floor); mCeil.upload(L.ceiling); mTrim.upload(L.trim);
-  for (float x = -28; x <= 28.01f; x += kLightStep) for (float z = -28; z <= 28.01f; z += kLightStep) {
-    lightPos.push_back({x, kRoomH, z}); float h = hash2((int)(x * 7), (int)(z * 7), 99); lightFlicker.push_back(h > 0.9f ? h : 0.f);
-  }
-  buildStatic();
+  { std::vector<ZoneMeshes> zm; buildZoneMeshes(zm);
+    for (int z = 0; z < ZONE_COUNT; z++) {
+      ZoneGpu& G = zones[z]; G.walls.upload(zm[z].walls); G.floor.upload(zm[z].floor); G.ceiling.upload(zm[z].ceiling); G.trim.upload(zm[z].trim); G.props.upload(zm[z].props); G.water.upload(zm[z].water);
+      G.lights = zm[z].lights; for (const Vec3& l : G.lights) { float h = hash2((int)(l.x * 7), (int)(l.z * 7), 99); G.flicker.push_back(h > 1 - zoneInfo(z).flickerChance ? h : 0.f); }
+    } }
+  buildStatic(); buildLobbyStatic();
   return true;
 }
 
@@ -135,26 +138,30 @@ void Scene::buildStatic() {
 
 // ------------------------------------------------------------------------------------------ per frame
 void Scene::pickLights(const Game& g, const Vec3& head) {
-  LightSet& L = R.lights; L.n = 0;
-  float dim = g.lightsDim ? 0.25f : 1.f;
-  int best[6] = {-1, -1, -1, -1, -1, -1}; float bd[6]; for (float& x : bd) x = 1e9f;
-  for (int i = 0; i < (int)lightPos.size(); i++) {
-    float d = length2(lightPos[i] - head);
-    for (int k = 0; k < 6; k++) if (d < bd[k]) { for (int j = 5; j > k; j--) { bd[j] = bd[j - 1]; best[j] = best[j - 1]; } bd[k] = d; best[k] = i; break; }
+  LightSet& L = R.lights; L.n = 0; const ZoneInfo& Z = zoneInfo(g.zone); const ZoneGpu& G = zones[g.zone];
+  bool blackout = g.eventT[EV_BLACKOUT] > 0, blood = g.eventT[EV_BLOOD_MOON] > 0;
+  float dim = (g.lightsDim && g.zone == ZONE_BACKROOMS) ? 0.25f : 1.f;
+  Vec3 lc = Z.lightColor * dim; if (blood) lc = Vec3{1.2f, 0.12f, 0.08f}; if (blackout) lc = Vec3{0.25f, 0.02f, 0.02f};
+  int maxN = Z.dark || blackout ? 5 : 6;
+  std::vector<std::pair<float, int>> d; for (int i = 0; i < (int)G.lights.size(); i++) d.push_back({length2(G.lights[i] - head), i});
+  std::sort(d.begin(), d.end());
+  for (int k = 0; k < (int)d.size() && L.n < maxN; k++) {
+    int i = d[k].second; float f = 1;
+    if (G.flicker[i] > 0) { float t = g.time * (8 + G.flicker[i] * 10); f = 0.55f + 0.45f * (std::sin(t) * std::sin(t * 2.3f + i) > -0.2f ? 1.f : 0.f); }
+    if (blackout && (i % 5)) continue;
+    L.pos[L.n] = {G.lights[i].x, G.lights[i].y - 0.15f, G.lights[i].z, Z.lightRadius}; L.col[L.n] = {lc.x * f, lc.y * f, lc.z * f, 0}; L.n++;
   }
-  for (int k = 0; k < 6; k++) {
-    if (best[k] < 0) continue; int i = best[k]; float f = 1;
-    if (lightFlicker[i] > 0) { float t = g.time * (8 + lightFlicker[i] * 10); f = 0.55f + 0.45f * (std::sin(t) * std::sin(t * 2.3f + i) > -0.2f ? 1.f : 0.f); }
-    L.pos[L.n] = {lightPos[i].x, lightPos[i].y - 0.15f, lightPos[i].z, 7.5f}; L.col[L.n] = {1.05f * f * dim, 0.95f * f * dim, 0.62f * f * dim, 0}; L.n++;
-  }
-  if (length(head - kDenCenter) < 12) {
+  if (g.zone == ZONE_BACKROOMS && length(head - kDenCenter) < 12 && L.n < 7) {
     L.pos[L.n] = {-10.5f, 2.4f, 0, 9}; L.col[L.n] = {0.7f, 0.35f, 1.0f, 0}; L.n++;
-    L.pos[L.n] = {-10.0f, 1.8f, -2.8f, 6}; L.col[L.n] = {0.9f, 0.2f, 0.25f, 0}; L.n++;
   }
-  if (g.sawState) { if (L.n < 8) { L.pos[L.n] = {g.bladeB.x, g.bladeB.y, g.bladeB.z, 2.0f}; L.col[L.n] = {0.6f * g.sawT, 0.35f * g.sawT, 0.1f * g.sawT, 0}; L.n++; } }
-  R.ambient = g.lightsDim ? Vec3{0.03f, 0.025f, 0.015f} : Vec3{0.1f, 0.09f, 0.05f};
-  R.sky = g.lightsDim ? Vec3{0.06f, 0.05f, 0.03f} : Vec3{0.3f, 0.27f, 0.16f};
-  R.fogColor = g.lightsDim ? Vec3{0.02f, 0.016f, 0.008f} : Vec3{0.09f, 0.075f, 0.03f};
+  if ((Z.dark || blackout) && L.n < 8) {   // your own dim head-lamp in the dark
+    Vec3 f = g.loco.headQW.rotate({0, 0, -1.2f}); L.pos[L.n] = {head.x + f.x, head.y + f.y + 0.2f, head.z + f.z, 6.5f}; L.col[L.n] = {0.55f, 0.5f, 0.4f, 0}; L.n++;
+  }
+  if (g.sawState && L.n < 8) { L.pos[L.n] = {g.bladeB.x, g.bladeB.y, g.bladeB.z, 2.0f}; L.col[L.n] = {0.6f * g.sawT, 0.35f * g.sawT, 0.1f * g.sawT, 0}; L.n++; }
+  float amb = (blackout ? 0.25f : 1.f) * dim;
+  R.ambient = Z.ambient * amb; R.sky = Z.sky * amb; R.ground = Z.ambient * 0.8f * amb;
+  R.fogColor = blood ? Vec3{0.12f, 0.01f, 0.01f} : blackout ? Z.fog * 0.2f : Z.fog; R.fogNear = Z.fogNear; R.fogFar = blackout ? std::min(Z.fogFar, 12.f) : Z.fogFar;
+  if (g.phase == PH_HIDE && g.myRole() == PR_MONSTER) { R.fogNear = 0.2f; R.fogFar = 1.2f; R.fogColor = {0, 0, 0}; }   // monsters can't peek
 }
 
 void Scene::drawRobotHand(const Vec3& pos, const Quat& q, float s, const Game& g) {
@@ -204,25 +211,68 @@ void Scene::drawAvatar(int ki, const AvatarPose& p, Vec3 fur, const Game& g, con
   }
 }
 
+void Scene::drawBots(const Game& g) {
+  Mesh tags; Quat yq = Quat::yaw(yawOf(g.loco.headQW)); Vec3 right = yq.rotate({1, 0, 0});
+  for (const Bot& b : g.bots) {
+    if (!b.active) continue;
+    if (b.part >= 0 && zoneAt(b.p) != g.zone) continue;
+    bool monster = b.part >= 0 && b.role == PR_MONSTER && !b.disguised;
+    float sc = monster ? 1.35f : 1.f;
+    AvatarPose p; p.scale = sc; p.bodyYaw = b.facing; p.limbs = b.limbs;
+    Quat q = Quat::yaw(b.facing); float bob = std::sin(b.walkPhase * 2) * 0.02f;
+    p.head = b.p + Vec3{0, (0.8f + bob) * sc, 0}; p.headQ = q * Quat::axisAngle({1, 0, 0}, b.alive ? -0.1f : 0.f);
+    if (!b.alive && !b.sliced) {   // ragdoll-lite: slump over
+      float k = clampf((6 - b.deadT) * 2.5f, 0, 1); p.head = b.p + q.rotate({0, 0.8f - 0.55f * k, -0.35f * k}); p.headQ = q * Quat::axisAngle({1, 0, 0}, -1.3f * k);
+    }
+    for (int h = 0; h < 2; h++) {
+      float side = h ? 1.f : -1.f, sw = std::sin(b.walkPhase + h * PI) * std::min(1.f, length(b.vel)) * 0.25f;
+      p.hand[h] = b.p + q.rotate(Vec3{0.3f * side, 0.06f + std::max(0.f, -sw) * 0.3f, -0.18f + sw} * sc);
+      p.handQ[h] = q * Quat::axisAngle({1, 0, 0}, -1.25f); p.curl[h] = 0.4f;
+    }
+    Vec3 fur = b.hitFlash > 0 ? lerp(C3(b.fur), Vec3{1, 0.3f, 0.3f}, b.hitFlash * 2) : C3(b.fur);
+    if (b.sliced) {
+      for (int k = 0; k < 2; k++) {
+        float sg = k ? -1.f : 1.f; Vec4 clip{b.cutN.x * sg, b.cutN.y * sg, b.cutN.z * sg, -dot(b.cutN, b.cutP) * sg};
+        Mat4 half = Mat4::translate(b.cutP + b.halfOff[k]) * Mat4::rotate(b.halfQ[k]) * Mat4::translate(-b.cutP);
+        drawAvatar(KIT_GORILLA, p, fur, g, &clip, &half);
+      }
+    } else drawAvatar(monster ? KIT_MONSTER : KIT_GORILLA, p, monster ? C3(rgb(0x3a1414)) : fur, g);
+    if (b.part >= 0 && b.alive && b.part < (int)g.parts.size()) {
+      const Participant& P = g.parts[b.part];
+      Color tc = (monster || (P.role == PR_MONSTER && g.phase == PH_END)) ? rgb(0xff4444) : rgb(0xffffff);
+      addText(tags, P.name, p.head + Vec3{0, 0.32f * sc, 0}, right, {0, 1, 0}, 0.05f, tc);
+    }
+  }
+  mTags.upload(tags, true); R.add(mTags, Mat4{}, {1, 1, 1, 0}, MODE_TEXT, R.texFont);
+}
+
 void Scene::build(const Game& g, const Input& in, float dt) {
   R.begin();
   const Locomotion& L = g.loco;
   pickLights(g, L.headW);
-  // level
-  R.add(mWalls, Mat4{}, {1, 1, 1, 0}, MODE_TEX, R.texWall);
-  R.add(mFloor, Mat4{}, {1, 1, 1, 0}, MODE_TEX, R.texCarpet);
-  R.add(mCeil, Mat4{}, {1, 1, 1, 0}, MODE_TEX, R.texCeil);
-  R.add(mTrim, Mat4{}); R.add(mStatic, Mat4{});
-  R.add(mStaticText, Mat4{}, {1, 1, 1, 0}, MODE_TEXT, R.texFont);
-  // lights
-  { std::vector<Instance> panels, diff; float dim = g.lightsDim ? 0.2f : 1.f;
-    for (size_t i = 0; i < lightPos.size(); i++) {
-      if (length2(lightPos[i] - L.headW) > 30 * 30) continue;
-      Mat4 m = Mat4::translate(lightPos[i]); panels.push_back(makeInst(m));
-      float f = 1; if (lightFlicker[i] > 0) { float t = g.time * (8 + lightFlicker[i] * 10); f = std::sin(t) * std::sin(t * 2.3f + i) > -0.2f ? 1.f : 0.35f; }
-      diff.push_back(makeInst(m, {f * dim, f * dim, f * dim, 0}));
+  // level: only the zone you are in
+  { const ZoneInfo& Z = zoneInfo(g.zone); const ZoneGpu& G = zones[g.zone];
+    R.add(G.walls, Mat4{}, {1, 1, 1, 0}, MODE_TEX, R.tex[Z.wallTex]);
+    R.add(G.floor, Mat4{}, {1, 1, 1, 0}, MODE_TEX, R.tex[Z.floorTex]);
+    R.add(G.ceiling, Mat4{}, {1, 1, 1, 0}, MODE_TEX, R.tex[Z.ceilTex]);
+    R.add(G.trim, Mat4{}); R.add(G.props, Mat4{});
+    if (G.water.ok()) R.add(G.water, Mat4::translate({0, 0.008f * std::sin(g.time * 1.3f), 0}), {1, 1, 1, 0.05f * std::sin(g.time * 2.f)});
+    if (g.zone != ZONE_LOBBY && g.zone != ZONE_LIGHTSOUT) {   // ceiling light panels
+      std::vector<Instance> panels, diff; float dim = (g.lightsDim && g.zone == ZONE_BACKROOMS) ? 0.2f : 1.f; if (g.eventT[EV_BLACKOUT] > 0) dim = 0.03f;
+      Vec3 c = g.eventT[EV_BLOOD_MOON] > 0 ? Vec3{1, 0.15f, 0.1f} : Vec3{1, 1, 1};
+      for (size_t i = 0; i < G.lights.size(); i++) {
+        if (length2(G.lights[i] - L.headW) > 34 * 34) continue;
+        Mat4 m = Mat4::translate(G.lights[i]); panels.push_back(makeInst(m));
+        float f = 1; if (G.flicker[i] > 0) { float t = g.time * (8 + G.flicker[i] * 10); f = std::sin(t) * std::sin(t * 2.3f + i) > -0.2f ? 1.f : 0.35f; }
+        diff.push_back(makeInst(m, {f * dim * c.x * Z.lightColor.x, f * dim * c.y * Z.lightColor.y, f * dim * c.z * Z.lightColor.z, 0}));
+      }
+      R.addInstanced(mLightPanel, panels); R.addInstanced(mLightDiff, diff);
     }
-    R.addInstanced(mLightPanel, panels); R.addInstanced(mLightDiff, diff); }
+  }
+  if (g.zone == ZONE_LOBBY) drawLobby(g);
+  if (g.zone == ZONE_BACKROOMS) {
+  R.add(mStatic, Mat4{});
+  R.add(mStaticText, Mat4{}, {1, 1, 1, 0}, MODE_TEXT, R.texFont);
   // pedestal ring + kill counter
   { Vec4 c = g.unlocked ? Vec4{0.3f, 1.f, 0.4f, 0.4f} : Vec4{1.f, 0.2f, 0.2f, 0.4f}; R.add(mPedRing, Mat4::translate({kFormX, 0, kFormZ[3]}), c); }
   // buttons
@@ -270,6 +320,7 @@ void Scene::build(const Game& g, const Input& in, float dt) {
   }
   // cubes
   { std::vector<Instance> ci; for (const Cube& c : g.cubes) ci.push_back(makeInst(Mat4::trs(c.p, c.q, c.half), {c.col.r, c.col.g, c.col.b, c.held >= 0 ? 0.15f : 0.f})); R.addInstanced(mCube, ci); }
+  }   // backrooms-only content
 
   // ---- local player body (head hidden: you are looking out of it)
   {
@@ -282,31 +333,10 @@ void Scene::build(const Game& g, const Input& in, float dt) {
     for (int h = 0; h < 2; h++) { p.hand[h] = L.hand[h].phys; p.handQ[h] = g.handQ[h]; p.curl[h] = std::max(in.grip[h], in.trigger[h] * 0.5f); if (!in.hand[h].valid) p.limbs &= ~(2 << h); }
     p.robotRight = g.hasSaw();
     int ki = g.form; Vec3 fur = g.form == FORM_GORILLA ? C3(g.fur) : g.form == FORM_MONSTER ? C3(rgb(0x3a1414)) : Vec3{0.5f, 0.5f, 0.5f};
+    if (g.myRole() == PR_GHOST) fur = Vec3{0.75f, 0.8f, 0.85f};
     drawAvatar(ki, p, fur, g);
   }
-  // ---- bots
-  for (const Bot& b : g.bots) {
-    if (!b.active) continue;
-    AvatarPose p; p.scale = 1; p.bodyYaw = b.facing; p.limbs = b.limbs;
-    Quat q = Quat::yaw(b.facing); float bob = std::sin(b.walkPhase * 2) * 0.02f;
-    p.head = b.p + Vec3{0, 0.8f + bob, 0}; p.headQ = q * Quat::axisAngle({1, 0, 0}, b.alive ? -0.1f : 0.f);
-    if (!b.alive && !b.sliced) {   // ragdoll-lite: slump over
-      float k = clampf((6 - b.deadT) * 2.5f, 0, 1); p.head = b.p + q.rotate({0, 0.8f - 0.55f * k, -0.35f * k}); p.headQ = q * Quat::axisAngle({1, 0, 0}, -1.3f * k);
-    }
-    for (int h = 0; h < 2; h++) {
-      float side = h ? 1.f : -1.f, sw = std::sin(b.walkPhase + h * PI) * std::min(1.f, length(b.vel)) * 0.25f;
-      p.hand[h] = b.p + q.rotate({0.3f * side, 0.06f + std::max(0.f, -sw) * 0.3f, -0.18f + sw});
-      p.handQ[h] = q * Quat::axisAngle({1, 0, 0}, -1.25f); p.curl[h] = 0.4f;
-    }
-    Vec3 fur = b.hitFlash > 0 ? lerp(C3(b.fur), Vec3{1, 0.3f, 0.3f}, b.hitFlash * 2) : C3(b.fur);
-    if (b.sliced) {
-      for (int k = 0; k < 2; k++) {
-        float sg = k ? -1.f : 1.f; Vec4 clip{b.cutN.x * sg, b.cutN.y * sg, b.cutN.z * sg, -dot(b.cutN, b.cutP) * sg};
-        Mat4 half = Mat4::translate(b.cutP + b.halfOff[k]) * Mat4::rotate(b.halfQ[k]) * Mat4::translate(-b.cutP);
-        drawAvatar(KIT_GORILLA, p, fur, g, &clip, &half);
-      }
-    } else drawAvatar(KIT_GORILLA, p, fur, g);
-  }
+  drawBots(g);
   // ---- gore
   {
     std::vector<Instance> drops, poofs, decals;
@@ -336,6 +366,7 @@ void Scene::build(const Game& g, const Input& in, float dt) {
       for (int i = 0; i < 60; i++) { Vec3 d = normalize(Vec3{r.range(-1, 1), r.range(-0.3f, 1), r.range(-1, 1)}); s.push_back(makeInst(Mat4::trs(g.sporeFxPos + d * (0.3f + 3.0f * k), {}, 0.03f * (1 - k) + 0.01f), {0.3f, 1.4f, 0.4f, 1.0f})); }
       R.addInstanced(mDrop, s, MODE_GLOW); }
   }
+  drawOverlays(g);
   // ---- toast (head-locked, slightly below eye line)
   if (g.toast.t > 0) {
     if (toastKey != g.toast.text) { toastKey = g.toast.text; Mesh t; addText(t, g.toast.text, {0, 0, 0}, {1, 0, 0}, {0, 1, 0}, 0.03f, rgb(0xffd34d)); mToast.upload(t, true); }
@@ -343,6 +374,113 @@ void Scene::build(const Game& g, const Input& in, float dt) {
     R.add(mToast, Mat4::trs(pos, yq, 1), {1, 1, 1, 0}, MODE_TEXT, R.texFont);
   }
   R.finish();
+}
+
+}  // namespace dow
+
+namespace dow {
+
+static const char* kModeLabel[] = {"ONE MONSTER", "TWO MONSTERS", "INFECTION", "SHAPESHIFTER"};
+static std::string fmtTime(float t) { int s = (int)std::ceil(std::max(t, 0.f)); char b[16]; std::snprintf(b, sizeof b, "%d:%02d", s / 60, s % 60); return b; }
+
+void Scene::buildLobbyStatic() {
+  Mesh t; const Vec3 O = zoneInfo(ZONE_LOBBY).origin;
+  const Vec3 X{1, 0, 0}, NZ{0, 0, -1}, Y{0, 1, 0};
+  for (int k = 0; k < kNumLobbyKeys; k++) {   // labels printed on the key tops, readable from the stool
+    std::string l = kLobbyKeys[k]; float h = l.size() > 2 ? 0.014f : 0.03f; if (l.rfind("OPT", 0) == 0) l = "OPT" + l.substr(3);
+    addText(t, l, lobbyKey(k) + Vec3{0, 0.0135f, 0}, X, NZ, h, rgb(0x101010), 0.1f);
+  }
+  addText(t, "DOOM ON WEDNESDAY", O + Vec3{0, 2.55f, -3.97f}, X, Y, 0.2f, rgb(0xffd34d));
+  addText(t, "UP / DOWN = PAGE    OPT 1-4 = CHOOSE    ENTER = CONFIRM", O + Vec3{0, 1.83f, -3.6f + 0.06f}, X, Y, 0.028f, rgb(0xcfc7a0));
+  addText(t, "<  MAP VOTE", O + Vec3{-4.97f, 2.85f, 0}, NZ, Y, 0.12f, rgb(0xffb347));
+  addText(t, "VOTE FOR THE NEXT MAP", O + Vec3{-9, 2.7f, -3.97f}, X, Y, 0.13f, rgb(0xffd34d));
+  addText(t, "POKE A PAD TO VOTE", O + Vec3{-9, 2.4f, -3.97f}, X, Y, 0.06f, rgb(0xcfc7a0));
+  addText(t, "READY", readyButton() + Vec3{0, 0.75f, 0.2f}, X, Y, 0.1f, rgb(0xffd34d));
+  addText(t, "GAME MODES\nBE THE MONSTER  - LIVE\nREGULAR  - COMING SOON\nDON'T SPLASH  - COMING SOON", O + Vec3{4.97f, 2.55f, 2.4f}, Vec3{0, 0, 1}, Y, 0.065f, rgb(0xddd5b0));
+  for (int m = 0; m < kNumMaps; m++) {
+    const ZoneInfo& Z = zoneInfo(1 + m); Vec3 c = O + Vec3{-12.86f, 1.95f, -3.0f + m * 2.0f};
+    addText(t, Z.name, c + Vec3{0, 0.15f, 0}, NZ, Y, 0.1f, rgb(Z.accent)); addText(t, Z.blurb, c + Vec3{0, -0.12f, 0}, NZ, Y, 0.045f, rgb(0xcfc7a0));
+  }
+  mLobbyText.upload(t);
+  Mesh k; k.paint = Paint{rgb(0xd8d4c8), 0.12f, false, 0}; k.roundBox({0, 0, 0}, {0.033f, 0.012f, 0.033f}, 0.35f, {}, 6); mLobbyKeyCap.upload(k);
+  Mesh sc; sc.paint = Paint{rgb(0x0a140c), 0.5f, false, 0}; sc.box(lobbyScreenCenter() + Vec3{0, 0, -0.004f}, {0.86f, 0.45f, 0.002f}); mLobbyScreen.upload(sc);
+}
+
+void Scene::drawLobby(const Game& g) {
+  R.add(mLobbyScreen, Mat4{}, {1, 1, 1, 0}, MODE_GLOW);
+  R.add(mLobbyText, Mat4{}, {1, 1, 1, 0}, MODE_TEXT, R.texFont);
+  { std::vector<Instance> keys;
+    for (int k = 0; k < kNumLobbyKeys; k++) { bool opt = std::string(kLobbyKeys[k]).rfind("OPT", 0) == 0, big = std::string(kLobbyKeys[k]).size() > 1 && !opt;
+      Vec4 c = opt ? Vec4{0.6f, 0.85f, 1, 0.1f} : big ? Vec4{1, 0.85f, 0.5f, 0.1f} : Vec4{1, 1, 1, 0.05f};
+      keys.push_back(makeInst(Mat4::trs(lobbyKey(k), {}, Vec3{opt ? 2.0f : big ? 1.0f : 1.f, 1, 1}), c)); }
+    R.addInstanced(mLobbyKeyCap, keys); }
+  // computer screen + vote counts + round board, rebuilt when anything shown changes
+  char buf[256]; std::string key;
+  const Profile& P = g.profile;
+  std::snprintf(buf, sizeof buf, "%d|%s|%s|%s|%d%d%d|%d|%d|%d|%d|%d|%d|%s|%d|%d%d%d%d|%d|%d", g.page, g.typed.c_str(), P.name.c_str(), P.room.c_str(), P.r, P.g, P.b, P.voice, P.mode, P.monsterMode,
+                g.phase, (int)g.phaseT, g.role, g.screenMsgT > 0 ? g.screenMsg.c_str() : "", g.colorChan, g.votes[0], g.votes[1], g.votes[2], g.votes[3], g.myVote, (int)g.parts.size());
+  key = buf; for (auto& p : g.parts) key += p.name + std::to_string((int)p.pity);
+  if (key != lobbyCache) {
+    lobbyCache = key; Mesh t; const Vec3 X{1, 0, 0}, Y{0, 1, 0}, NZ{0, 0, -1}, Z1{0, 0, 1};
+    Vec3 sc = lobbyScreenCenter(); Color green = rgb(0x66ff88), dim = rgb(0x2e7a40), white = rgb(0xe8ffe8);
+    static const char* pages[CP_COUNT] = {"ROOM", "NAME", "COLOR", "VOICE", "GAME MODE", "MONSTER MODE", "QUEUE", "STAFF"};
+    for (int i = 0; i < CP_COUNT; i++) addText(t, std::string(i == g.page ? "> " : "  ") + pages[i], sc + Vec3{-0.62f, 0.36f - i * 0.075f, 0}, X, Y, 0.04f, i == g.page ? white : dim);
+    std::string body; static const char* gm[] = {"BE THE MONSTER", "REGULAR (SOON)", "DON'T SPLASH (SOON)"};
+    switch (g.page) {
+      case CP_ROOM: body = "ROOM: " + P.room + "\n\nTYPE A CODE + ENTER\nOPT1 = PUBLIC ROOM\n\n> " + g.typed + "_\n\nONLINE ROOMS ARE NOT LIVE YET:\nBOTS FILL YOUR ROOM"; break;
+      case CP_NAME: body = "NAME: " + P.name + "\n\nTYPE A NEW NAME + ENTER\n\n> " + g.typed + "_"; break;
+      case CP_COLOR: std::snprintf(buf, sizeof buf, "COLOR\n\n%sRED   %d\n%sGREEN %d\n%sBLUE  %d\n\nOPT1-3 PICK, 0-9 SET", g.colorChan == 0 ? "> " : "  ", P.r, g.colorChan == 1 ? "> " : "  ", P.g, g.colorChan == 2 ? "> " : "  ", P.b); body = buf; break;
+      case CP_VOICE: body = std::string("VOICE CHAT: ") + (P.voice ? "ON" : "OFF") + "\n\nOPT1 = ON\nOPT2 = OFF\n\n(VOICE NEEDS ONLINE PLAY)"; break;
+      case CP_MODE: body = std::string("MODE: ") + gm[P.mode] + "\n\nOPT1 BE THE MONSTER\nOPT2 REGULAR (SOON)\nOPT3 DON'T SPLASH (SOON)\nOPT4 PRACTICE AREA"; break;
+      case CP_MONSTER: body = std::string("NEXT ROUND: ") + kModeLabel[P.monsterMode] + "\n\nOPT1 ONE MONSTER\nOPT2 TWO MONSTERS\nOPT3 INFECTION\nOPT4 SHAPESHIFTER  (B = SHIFT)"; break;
+      case CP_QUEUE: std::snprintf(buf, sizeof buf, "NEXT ROUND IN %s\nMODE: %s\nYOUR MONSTER CHANCE: %d%%\n\nOPT1 = READY (START NOW)", fmtTime(g.phaseT).c_str(), kModeLabel[P.monsterMode], (int)std::lround(g.monsterChance(0) * 100)); body = buf; break;
+      case CP_STAFF:
+        if (g.role < 1) body = "STAFF ONLY\n\nTYPE YOUR CODE + ENTER\n\n> " + std::string(g.typed.size(), '*') + "_";
+        else body = std::string(g.role >= 2 ? "OWNER PANEL\n" : "MOD PANEL\n") + "OPT1 BLACKOUT   OPT2 LOW GRAVITY\nOPT3 BLOOD MOON OPT4 GIANT MODE\n1 START ROUND  2 END ROUND\n3 MONSTER RUSH 4 BOT PARTY\n5 ME MONSTER NEXT (OWNER)\n6 UNLOCK STALKER (OWNER)\n7 CLEAR GORE   8 MOD DEN\n9 BACK TO LOBBY";
+        break;
+    }
+    addText(t, body, sc + Vec3{0.22f, 0.06f, 0}, X, Y, 0.036f, green);
+    if (g.screenMsgT > 0) addText(t, g.screenMsg, sc + Vec3{0, -0.39f, 0}, X, Y, 0.032f, rgb(0xffd34d));
+    for (int m = 0; m < kNumMaps; m++) {
+      std::snprintf(buf, sizeof buf, "%d VOTE%s%s", g.votes[m], g.votes[m] == 1 ? "" : "S", g.myVote == m ? "\n(YOURS)" : "");
+      addText(t, buf, votePadButton(m) + Vec3{0.05f, 0.42f, 0}, NZ, Y, 0.08f, g.myVote == m ? rgb(0x66ff88) : rgb(0xffffff));
+    }
+    // round board on the east wall
+    std::string board; std::snprintf(buf, sizeof buf, "BE THE MONSTER\nNEXT ROUND IN %s\n%s\n\nMONSTER CHANCE\n", fmtTime(g.phaseT).c_str(), kModeLabel[P.monsterMode]); board = buf;
+    for (int i = 0; i < (int)g.parts.size(); i++) { std::snprintf(buf, sizeof buf, "%-8s %3d%%\n", g.parts[i].name.c_str(), (int)std::lround(g.monsterChance(i) * 100)); board += buf; }
+    addText(t, board, zoneInfo(ZONE_LOBBY).origin + Vec3{4.97f, 1.55f, -1.2f}, Z1, Y, 0.06f, rgb(0xffd34d));
+    mLobbyDyn.upload(t, true);
+  }
+  R.add(mLobbyDyn, Mat4{}, {1, 1, 1, 0}, MODE_TEXT, R.texFont);
+}
+
+void Scene::drawOverlays(const Game& g) {
+  const Locomotion& L = g.loco; Quat hq = L.headQW, yq = Quat::yaw(yawOf(hq));
+  // big banner (round start / end / events), follows your gaze
+  if (g.bannerT > 0) {
+    if (bannerKey != g.banner) { bannerKey = g.banner; Mesh t; addText(t, g.banner, {0, 0, 0}, {1, 0, 0}, {0, 1, 0}, 0.06f, rgb(0xff4433)); mBanner.upload(t, true); }
+    R.add(mBanner, Mat4::trs(L.headW + hq.rotate({0, 0.12f, -1.1f}) , hq, 1), {1, 1, 1, 0}, MODE_TEXT, R.texFont);
+  }
+  // round HUD, small, low in view
+  std::string hud;
+  if (g.phase == PH_LOBBY && g.zone == ZONE_LOBBY && g.profile.mode == GM_BE_THE_MONSTER) hud = "NEXT ROUND " + fmtTime(g.phaseT);
+  else if (g.phase >= PH_STARTING && g.phase <= PH_HUNT) {
+    int alive = 0; for (auto& p : g.parts) alive += p.role == PR_SURVIVOR;
+    static const char* ph[] = {"", "GET READY", "HIDE", "HUNT", ""}; static const char* rl[] = {"SURVIVOR", "MONSTER", "GHOST"};
+    char b[160]; std::snprintf(b, sizeof b, "%s %s   SURVIVORS %d   YOU: %s%s", ph[g.phase], fmtTime(g.phaseT).c_str(), alive, rl[g.myRole()],
+                               g.myRole() == PR_MONSTER && g.roundMode == MM_SHAPESHIFTER ? (g.parts[0].shifted ? "  (B: HIDE)" : "  (B: SHIFT)") : "");
+    hud = b;
+  }
+  if (!hud.empty()) {
+    if (hud != hudKey) { hudKey = hud; Mesh t; addText(t, hud, {0, 0, 0}, {1, 0, 0}, {0, 1, 0}, 0.022f, g.myRole() == PR_MONSTER ? rgb(0xff6655) : rgb(0xddd5b0)); mHud.upload(t, true); }
+    R.add(mHud, Mat4::trs(L.headW + yq.rotate({0, -0.32f, -0.8f}), yq * Quat::axisAngle({1, 0, 0}, 0.35f), 1), {1, 1, 1, 0}, MODE_TEXT, R.texFont);
+  }
+  // jumpscare: the monster's face right in yours
+  if (g.jumpscare > 0) {
+    float k = g.jumpscare, shake = std::sin(g.time * 90) * 0.01f;
+    Mat4 m = Mat4::trs(L.headW + hq.rotate({shake, -0.03f, -0.34f + 0.05f * (1.4f - k)}), hq * Quat::yaw(PI), 1.7f);
+    R.add(kits[KIT_MONSTER].head, m, {1, 1, 1, 0.15f}, MODE_LIT, 0, C3(rgb(0x3a1414)));
+  }
 }
 
 }  // namespace dow

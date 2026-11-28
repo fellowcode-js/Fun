@@ -39,12 +39,16 @@ void Game::init() {
     if (d.id == BTN_RACK_SAW) { b.p = {-10.0f, 1.0f, -3.40f}; b.half = {0.09f, 0.09f, 0.035f}; }
     buttons.push_back(b);
   }
+  { Button b; b.id = BTN_TO_LOBBY; b.p = {-1.2f, 0.935f, -5.2f}; b.col = rgb(0xffb347); b.label = "LOBBY"; buttons.push_back(b); }
   resetCubes();
   for (auto& b : bots) b = Bot{};
   gore.clear();
   form = FORM_GORILLA; csaw = false; sawState = 0; sawT = 0; targetScale = 1;
   buildOS();
   load();
+  loadProfile(); fur = furColor();
+  setupParticipants();
+  goToLobby();
 }
 
 void Game::resetCubes() {
@@ -123,7 +127,11 @@ void Game::update(const Input& in) {
   else if (std::fabs(in.stickR.x) < 0.35f) rxLatch = false;
 
   lastHead = in.head;
+  world.activeZone = zone = zoneAt(loco.headW);
+  loco.P.gravity = eventT[EV_LOW_GRAVITY] > 0 ? 3.2f : 9.81f;
+  if (eventT[EV_GIANT] > 0) targetScale = 2.2f; else if (targetScale > 2) targetScale = form == FORM_GORILLA ? 1.f : 1.4f;
   loco.step(dt, in.head, in.hand, world, role);
+  world.activeZone = zone = zoneAt(loco.headW);
   for (int h = 0; h < 2; h++) {
     handQ[h] = loco.toWorld(in.hand[h].q); gripNow[h] = in.grip[h] > 0.7f;
     gripEdge[h] = gripNow[h] && !gripPrev[h];
@@ -140,7 +148,10 @@ void Game::update(const Input& in) {
   updateCombat(in, dt);
   updateCubes(in, dt);
   updateButtons(dt);
+  updateLobbyInputs();
   updateBots(dt);
+  updateRound(in, dt);
+  updateRoundBots(dt);
   gore.level = goreLevel; gore.update(dt, world);
 
   if (toast.t > 0) toast.t -= dt;
@@ -271,7 +282,7 @@ void Game::updateCombat(const Input& in, float dt) {
 void Game::updateBots(float dt) {
   static Rng r(555);
   for (auto& b : bots) {
-    if (!b.active) continue;
+    if (!b.active || b.part >= 0) continue;   // round/lobby bot players run in rounds.cpp
     b.hitFlash -= dt;
     if (!b.alive) {
       b.deadT -= dt; if (b.deadT <= 0) b.active = false;
@@ -310,6 +321,8 @@ void Game::updateBots(float dt) {
 // ---------------------------------------------------------------- cubes
 void Game::updateCubes(const Input& in, float dt) {
   const float S = loco.scale;
+  struct ZoneGuard { World& w; int z; ~ZoneGuard() { w.activeZone = z; } } guard{world, world.activeZone};
+  world.activeZone = ZONE_BACKROOMS;   // the toy cubes live on the practice table
   for (int h = 0; h < 2; h++) {
     if (!in.hand[h].valid) { for (auto& c : cubes) if (c.held == h) c.held = -1; continue; }
     const Vec3 hp = loco.hand[h].phys;
@@ -412,6 +425,10 @@ void Game::press(int id, int h) {
     case BTN_FORM_STALKER:
       if (unlocked || role >= 1) setForm(FORM_STALKER);
       else { char t[64]; std::snprintf(t, sizeof t, "STALKER LOCKED: %d MORE KILLS", UNLOCK_KILLS - kills); say(t); sfx(SFX_DENY, at); buzz(h, 1, 0.15f); }
+      break;
+    case BTN_TO_LOBBY:
+      if (phase == PH_LOBBY) { loco.teleport(lobbySpawn(), lastHead); loco.yaw = lobbySpawnYaw(); say("MAIN LOBBY"); }
+      else say("A ROUND IS RUNNING - WAIT FOR IT TO END");
       break;
     case BTN_RACK_SAW:
       if (role >= 1) { csaw = !csaw; say(csaw ? "CHAINSAW HAND ON  (A)" : "chainsaw hand off"); if (!hasSaw()) sawState = 0; }

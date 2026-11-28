@@ -1,6 +1,7 @@
 #include "world.h"
 #include "map_data.h"
 #include "layout.h"
+#include "maps.h"
 #include <cmath>
 
 namespace dow {
@@ -11,18 +12,15 @@ int World::add(const Vec3& mn, const Vec3& mx, uint8_t surface, uint8_t flag, fl
 
 void World::buildLevel() {
   cols.clear();
-  for (int i = 0; i < kNumWalls; i++) {
-    const WallDef& w = kWalls[i];
-    add({w.mn[0], w.mn[1], w.mn[2]}, {w.mx[0], w.mx[1], w.mx[2]}, SURF_WALL, w.flag == 1 ? COL_MOD_GATE : COL_SOLID);
-  }
-  floorIdx = add({-200, -50, -200}, {200, 0, 200}, SURF_CARPET);
-  ceilIdx = add({-200, kRoomH, -200}, {200, 50, 200}, SURF_CEILING);
-  for (const PropBox& p : kPropBoxes) add(p.c - p.h, p.c + p.h, p.surface);
+  floorIdx = add({-400, -50, -400}, {400, 0, 400}, SURF_CARPET);
+  buildZoneColliders(*this);
+  ceilIdx = -1;
 }
 
 bool World::solidFor(int i, int role) const {
   const Collider& c = cols[i];
   if (!c.enabled) return false;
+  if (c.zone >= 0 && activeZone >= 0 && c.zone != activeZone) return false;
   if (c.flag == COL_MOD_GATE) return role < 1;
   return true;
 }
