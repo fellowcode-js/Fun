@@ -25,7 +25,7 @@ int main() {
     GCHECK(g.form == FORM_ROBOT, "poking the ROBOT button changes form (form %d)", g.form);
     run(g, in, 200); GCHECK(g.loco.scale > 1.35f, "robot form grows the player (scale %.2f)", g.loco.scale); }
   { Game g; g.init(); g.setForm(FORM_ROBOT); Input in = rest(); run(g, in, 200);
-    in.a = true; run(g, in, 1); in.a = false; run(g, in, 60);
+    in.a = true; run(g, in, 1); in.a = false; run(g, in, 100);   // Robot_ToChainsaw is 1.2 s
     GCHECK(g.sawState == 2, "A transforms the robot hand into a chainsaw (state %d)", g.sawState);
     for (int k = 0; k < 5; k++) {
       g.clearBots(); Vec3 head = g.loco.headW; Vec3 f = Quat::yaw(g.loco.yaw).rotate({0, 0, -1});

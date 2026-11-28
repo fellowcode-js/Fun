@@ -3,6 +3,7 @@
 #include "renderer.h"
 #include "../game/game.h"
 #include "../game/models.h"
+#include "model_asset.h"
 
 namespace dow {
 
@@ -32,7 +33,7 @@ class Scene {
 
  private:
   AvatarGpu kits[KIT_COUNT];
-  RobotHandKit robotKit; GpuMesh rhPalm, rhFinger, rhBlade, rhTooth, rhMotor;
+  ModelAsset robotArm;   // the original chainsaw hand (assets/robot_arm_right.dowm)
   PropKit props; GpuMesh mLightPanel, mLightDiff, mPedRing, mButtonCap, mCube, mDrop, mDecal, mGibChunk, mGibBone, mKeyCap;
   GpuMesh mWalls, mFloor, mCeil, mTrim, mStatic, mStaticText;
   GpuMesh mOSBg, mOSText, mDyn, mToast; std::string osKey, dynKey, toastKey;
@@ -40,7 +41,7 @@ class Scene {
   float bodyYaw = 0; bool bodyYawInit = false;
 
   void drawAvatar(int kit, const AvatarPose& p, Vec3 fur, const Game& g, const Vec4* clip = nullptr, const Mat4* half = nullptr);
-  void drawRobotHand(const Vec3& pos, const Quat& q, float s, float sawT, float spin);
+  void drawRobotHand(const Vec3& pos, const Quat& q, float s, const Game& g);
   void buildStatic();
   void pickLights(const Game& g, const Vec3& head);
 };

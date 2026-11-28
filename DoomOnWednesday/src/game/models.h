@@ -21,9 +21,7 @@ struct AvatarKit {
 enum FormKit { KIT_GORILLA = 0, KIT_MONSTER, KIT_ROBOT, KIT_STALKER, KIT_COUNT };
 AvatarKit buildAvatar(int form);
 
-// Robot chainsaw hand (right). Parts are drawn with an animation parameter t (0 = hand, 1 = saw).
-struct RobotHandKit { Mesh palm, finger, blade, tooth, motor; };
-RobotHandKit buildRobotHand();
+// The chainsaw hand is NOT generated: it is the original robot_arm_right model (assets/robot_arm_right.dowm).
 
 struct PropKit {
   Mesh lightPanel, lightDiffuser;

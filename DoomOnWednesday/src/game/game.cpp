@@ -179,16 +179,17 @@ void Game::updateSaw(const Input& in, float dt) {
   }
   aPrev = a; sporeCd -= dt;
   if (!hasSaw()) { sawState = 0; sawT = std::max(0.f, sawT - dt * 3); }
-  if (sawState == 1) { sawT += dt * 2.2f; if (sawT >= 1) { sawT = 1; sawState = 2; } }
-  if (sawState == 3) { sawT -= dt * 2.6f; if (sawT <= 0) { sawT = 0; sawState = 0; } }
+  // transitions last exactly as long as the original model's animations (Robot_ToChainsaw / Robot_ToHand)
+  if (sawState == 1) { sawT += dt / kSawAnimSeconds; if (sawT >= 1) { sawT = 1; sawState = 2; } }
+  if (sawState == 3) { sawT -= dt / kSawAnimSeconds; if (sawT <= 0) { sawT = 0; sawState = 0; } }
   bool live = sawState == 2;
   sawSpin += dt * (live ? 14.f : sawState ? 4.f : 0.f);
   sawLevel = live ? 1.f : (sawState ? 0.4f * sawT : 0.f);
   if (live) buzz(1, 0.22f, 0.03f);
-  // blade sticks out of the robot fist along the grip's -Z
+  // blade of the original robot_arm_right model: wrist-local (0,-0.14,0)..(0,-0.58,0), mounted +90 deg about X on the grip
   const float S = loco.scale; Quat q = handQ[1];
-  bladeA = loco.hand[1].phys + q.rotate(Vec3{0, 0.01f, -0.10f} * S);
-  bladeB = loco.hand[1].phys + q.rotate(Vec3{0, 0.01f, -0.10f - 0.46f * sawT} * S);
+  bladeA = loco.hand[1].phys + q.rotate(Vec3{0, 0, -0.14f} * S);
+  bladeB = loco.hand[1].phys + q.rotate(Vec3{0, 0, -0.14f - 0.44f * sawT} * S);
 }
 
 static float segSeg(const Vec3& p1, const Vec3& q1, const Vec3& p2, const Vec3& q2, Vec3& c2) {

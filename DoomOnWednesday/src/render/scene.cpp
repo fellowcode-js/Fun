@@ -39,8 +39,7 @@ bool Scene::init() {
     a.head.upload(a.kit.head); a.torso.upload(a.kit.torso); a.upperArm.upload(a.kit.upperArm); a.foreArm.upload(a.kit.foreArm);
     for (int h = 0; h < 2; h++) { a.palm[h].upload(a.kit.palm[h]); a.finger[h].upload(a.kit.finger[h]); a.thumb[h].upload(a.kit.thumb[h]); }
   }
-  robotKit = buildRobotHand();
-  rhPalm.upload(robotKit.palm); rhFinger.upload(robotKit.finger); rhBlade.upload(robotKit.blade); rhTooth.upload(robotKit.tooth); rhMotor.upload(robotKit.motor);
+  if (!robotArm.load("robot_arm_right.dowm", R)) std::fprintf(stderr, "DOW: chainsaw hand model missing\n");
   props = buildProps();
   mLightPanel.upload(props.lightPanel); mLightDiff.upload(props.lightDiffuser); mPedRing.upload(props.pedestalRing); mButtonCap.upload(props.buttonCap);
   mCube.upload(props.cube); mDrop.upload(props.dropGeo); mDecal.upload(props.decalQuad); mGibChunk.upload(props.gibChunk); mGibBone.upload(props.gibBone); mKeyCap.upload(props.keyCap);
@@ -158,30 +157,20 @@ void Scene::pickLights(const Game& g, const Vec3& head) {
   R.fogColor = g.lightsDim ? Vec3{0.02f, 0.016f, 0.008f} : Vec3{0.09f, 0.075f, 0.03f};
 }
 
-void Scene::drawRobotHand(const Vec3& pos, const Quat& q, float s, float t, float spin) {
-  Mat4 hm = Mat4::trs(pos, q, s);
-  R.add(rhPalm, hm);
-  float fold = smooth01(t * 1.4f), shrink = 1 - smooth01((t - 0.3f) * 1.6f) * 0.95f;
-  static const float fy[4] = {0.036f, 0.012f, -0.012f, -0.036f};
-  for (int i = 0; i < 4; i++) R.add(rhFinger, hm * Mat4::translate({-0.006f, fy[i], -0.075f}) * Mat4::rotate(Quat::yaw(fold * 1.6f)) * Mat4::scale({shrink, shrink, shrink}));
-  R.add(rhFinger, hm * Mat4::translate({-0.02f, 0.05f, -0.03f}) * Mat4::rotate(Quat::axisAngle({1, 0, 0}, 0.6f) * Quat::yaw(fold * 1.2f)) * Mat4::scale({shrink * 0.9f, shrink * 0.9f, shrink * 0.9f}));
-  if (t <= 0.02f) return;
-  float m = smooth01(t * 2);
-  R.add(rhMotor, hm * Mat4::translate({0, 0, 0.02f * (1 - m)}) * Mat4::scale({m, m, m}));
-  float L = 0.46f * smooth01((t - 0.15f) / 0.85f); if (L < 0.01f) return;
-  Mat4 bar = hm * Mat4::translate({0, 0.01f, -0.1f});
-  R.add(rhBlade, bar * Mat4::scale({1, 1, L}));
-  // chain teeth run around the bar's outline
-  std::vector<Instance> teeth; const int N = 36; float per = 2 * L + 2 * 0.04f * PI;
-  for (int i = 0; i < N; i++) {
-    float u = std::fmod(i * per / N + spin * 0.03f, per), z, y; float ang = 0;
-    if (u < L) { z = -u; y = 0.043f; ang = 0; }
-    else if (u < L + 0.04f * PI) { float a = (u - L) / 0.04f; z = -L - 0.04f * std::sin(a) * 0.6f; y = 0.043f * std::cos(a); ang = a; }
-    else if (u < 2 * L + 0.04f * PI) { z = -L + (u - L - 0.04f * PI); y = -0.043f; ang = PI; }
-    else { float a = (u - 2 * L - 0.04f * PI) / 0.04f; z = 0.04f * std::sin(a) * 0.3f; y = -0.043f * std::cos(a); ang = PI + a; }
-    teeth.push_back(makeInst(bar * Mat4::translate({0, y, z}) * Mat4::rotate(Quat::axisAngle({1, 0, 0}, -ang))));
+void Scene::drawRobotHand(const Vec3& pos, const Quat& q, float s, const Game& g) {
+  if (!robotArm.ok()) return;
+  // Same playback as the original game: Hand_Idle -> Robot_ToChainsaw -> Chainsaw_Idle -> Robot_ToHand
+  static const int aIdle = robotArm.anim("Hand_Idle"), aTo = robotArm.anim("Robot_ToChainsaw"), aBack = robotArm.anim("Robot_ToHand"), aSaw = robotArm.anim("Chainsaw_Idle");
+  robotArm.resetPose();
+  switch (g.sawState) {
+    case 0: robotArm.apply(aIdle, g.time, true); break;
+    case 1: robotArm.apply(aTo, g.sawT * kSawAnimSeconds, false); break;
+    case 2: robotArm.apply(aTo, kSawAnimSeconds, false); robotArm.apply(aSaw, g.time, true); break;
+    case 3: robotArm.apply(aBack, (1 - g.sawT) * kSawAnimSeconds, false); break;
   }
-  R.addInstanced(rhTooth, teeth);
+  robotArm.computeWorld();
+  // original mount: the model's fingers run down its -Y, rotated +90 deg about X onto the grip's -Z
+  robotArm.draw(R, Mat4::trs(pos, q, s) * Mat4::rotate(Quat::axisAngle({1, 0, 0}, PI / 2)));
 }
 
 void Scene::drawAvatar(int ki, const AvatarPose& p, Vec3 fur, const Game& g, const Vec4* clip, const Mat4* half) {
@@ -206,7 +195,7 @@ void Scene::drawAvatar(int ki, const AvatarPose& p, Vec3 fur, const Game& g, con
     Vec3 pole = body.rotate(Vec3{side * 0.7f, -0.5f, 0.45f});
     Bone b = solveArm(sh, wrist, K.upperLen * s, K.foreLen * s, pole, s, K.upperLen, K.foreLen);
     put(A.upperArm, b.upper); put(A.foreArm, b.fore);
-    if (h == 1 && p.robotRight) { if (!clip) drawRobotHand(p.hand[h], p.handQ[h], s, g.sawT, g.sawSpin); continue; }
+    if (h == 1 && p.robotRight) { if (!clip) drawRobotHand(p.hand[h], p.handQ[h], s, g); continue; }
     Mat4 hm = Mat4::trs(p.hand[h], p.handQ[h], hs);
     put(A.palm[h], hm);
     float c = p.curl[h];

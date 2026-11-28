@@ -111,7 +111,7 @@ static int shots(const std::string& out) {
   s.g.setForm(FORM_ROBOT); s.g.role = 2;
   s.g.loco.teleport({-4.2f, 0, 1.6f}, s.in.head); s.baseInput(); s.steps(200);
   s.g.spawnBot(0, {-4.2f, 0, 0.75f});
-  s.in.a = true; s.steps(2); s.in.a = false; s.steps(80);   // transform to saw
+  s.in.a = true; s.steps(2); s.in.a = false; s.steps(100);  // transform to saw (1.2 s)
   for (int i = 0; i < 26; i++) { float t = i / 25.f; s.in.hand[1].p = Vec3{0.55f - 0.9f * t, 1.15f, -0.55f}; s.in.hand[1].q = Quat::axisAngle({0, 0, 1}, -0.2f); s.steps(1); }
   s.steps(14);
   { Vec3 h = g.loco.headW; s.shot(out + "/04_chainsaw.png", h + Vec3{-1.7f, 0.5f, -1.5f}, h + Vec3{0.1f, -0.55f, -0.55f}, 70); }

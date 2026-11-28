@@ -184,26 +184,6 @@ AvatarKit buildAvatar(int form) {
   switch (form) { case KIT_MONSTER: return monster(); case KIT_ROBOT: return robot(); case KIT_STALKER: return stalker(); default: return gorilla(); }
 }
 
-// --------------------------------------------------------------------------------------------- robot chainsaw hand
-RobotHandKit buildRobotHand() {
-  RobotHandKit r;
-  P(r.palm, 0x8e949c); r.palm.roundBox({0.0f, 0, -0.02f}, {0.035f, 0.052f, 0.055f}, 0.3f, {}, 8);
-  P(r.palm, 0x4a5058); r.palm.cylinder({0.0f, 0, 0.06f}, {0.0f, 0, 0.0f}, 0.045f, 0.042f, 14, true);
-  P(r.palm, 0xffaa22, 0.7f); r.palm.box({0.037f, 0, -0.02f}, {0.003f, 0.03f, 0.03f});
-  P(r.finger, 0x6a7078); r.finger.roundBox({0, 0, -0.022f}, {0.011f, 0.011f, 0.024f}, 0.35f, {}, 6);
-  P(r.finger, 0x4a5058); r.finger.sphere({0, 0, 0}, 0.012f, 8, 5);
-  r.finger.roundBox({-0.004f, 0, -0.058f}, {0.01f, 0.01f, 0.016f}, 0.35f, {}, 6);
-  // motor housing that slides out of the forearm
-  P(r.motor, 0xd84a1a); r.motor.roundBox({0.0f, 0.0f, -0.05f}, {0.04f, 0.055f, 0.05f}, 0.35f, {}, 8);
-  P(r.motor, 0x2a2a2a); for (int i = 0; i < 4; i++) r.motor.box({0.041f, -0.03f + i * 0.02f, -0.05f}, {0.002f, 0.004f, 0.035f});
-  // guide bar (along -Z, length 1 = 0.46 m scaled at draw time)
-  P(r.blade, 0xb8bcc4); r.blade.roundBox({0, 0, -0.5f}, {0.006f, 0.04f, 0.5f}, 0.15f, {}, 10);
-  P(r.blade, 0xffaa22, 0.4f); r.blade.box({0.0065f, 0, -0.45f}, {0.0005f, 0.006f, 0.35f});
-  P(r.tooth, 0x2a2c30); r.tooth.box({0, 0, 0}, {0.0045f, 0.007f, 0.007f});
-  P(r.tooth, 0xd0d4dc); r.tooth.cylinder({0, 0.006f, 0}, {0, 0.014f, -0.004f}, 0.004f, 0.0005f, 4, true);
-  return r;
-}
-
 // --------------------------------------------------------------------------------------------- props
 static void woodBox(Mesh& m, const Vec3& c, const Vec3& h, uint32_t col) { P(m, col); size_t s = m.v.size(); m.box(c, h); mottle(m, s, 0.08f, 22, 3); }
 

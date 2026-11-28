@@ -9,6 +9,8 @@
 
 namespace dow {
 
+constexpr float kSawAnimSeconds = 1.2f;   // length of Robot_ToChainsaw / Robot_ToHand in robot_arm_right.glb
+
 enum Form { FORM_GORILLA = 0, FORM_MONSTER = 1, FORM_ROBOT = 2, FORM_STALKER = 3 };
 enum Sfx { SFX_TAP, SFX_THUD, SFX_GORE, SFX_SLICE, SFX_BEEP, SFX_DENY, SFX_RIP, SFX_SPORE, SFX_SAW_ON, SFX_SAW_OFF, SFX_UNLOCK, SFX_PUNCH, SFX_KEY };
 
